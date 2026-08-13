@@ -1,6 +1,6 @@
 {
-  "name": "@icydotdev/runny",
-  "version": "0.1.5",
+  "name": "@polymech/runny",
+  "version": "0.2.0",
   "description": "A local GUI for running npm/pnpm/yarn scripts across your project",
   "type": "module",
   "bin": {
@@ -10,43 +10,51 @@
     "dist"
   ],
   "scripts": {
-    "dev:server": "tsx watch src/cli.ts",
-    "dev:client": "vite",
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "build:client": "vite build",
+    "dev:server": "tsx watch --clear-screen=false src/cli.ts",
+    "dev:client": "rspack dev --mode development",
+    "dev": "concurrently -k --kill-signal SIGKILL -n server,client -c blue,magenta \"tsx watch --clear-screen=false src/cli.ts\" \"node ./scripts/wait-and-rspack.mjs\"",
+    "build:client": "rspack build --mode production",
     "build:server": "tsc -p tsconfig.server.json",
     "build": "npm run build:client && npm run build:server",
+    "test": "tsx --test src/shared/group-scripts.test.ts src/client/lib/fuzzy-search.test.ts src/server/services/discovery.test.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "express": "^5.1.0",
+    "@radix-ui/react-collapsible": "^1.1.20",
+    "express": "^5.2.1",
     "fast-glob": "^3.3.3",
-    "open": "^10.1.0",
+    "open": "^11.0.0",
     "tree-kill": "^1.2.2",
-    "ws": "^8.18.0",
-    "yaml": "^2.7.0"
+    "ws": "^8.21.3",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@types/ws": "^8.5.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "@xterm/addon-fit": "^0.10.0",
+    "@rspack/cli": "^2.1.10",
+    "@rspack/core": "^2.1.10",
+    "@rspack/dev-server": "^2.2.0",
+    "@rspack/plugin-react-refresh": "^2.0.2",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.20.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@types/ws": "^8.18.1",
+    "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
-    "@xterm/xterm": "^5.5.0",
-    "autoprefixer": "^10.4.0",
-    "concurrently": "^9.1.0",
-    "lucide-react": "^0.468.0",
-    "postcss": "^8.4.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "tailwindcss": "^3.4.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0",
-    "vite": "^6.0.0",
-    "zustand": "^5.0.0"
+    "@xterm/xterm": "^6.0.0",
+    "autoprefixer": "^10.5.4",
+    "concurrently": "^10.0.4",
+    "css-loader": "^7.1.4",
+    "lucide-react": "^1.31.0",
+    "postcss": "^8.5.26",
+    "postcss-loader": "^8.2.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-refresh": "^0.18.0",
+    "style-loader": "^4.0.0",
+    "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "zustand": "^5.0.15"
   },
   "author": "Sam Kavanagh",
   "license": "MIT",
@@ -55,7 +63,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/icydotdev/runny"
+    "url": "https://github.com/polymech-info/runny"
   },
   "keywords": [
     "npm",
@@ -65,6 +73,7 @@
     "pnpm",
     "yarn",
     "runner",
-    "dashboard"
+    "dashboard",
+    "soft-ci"
   ]
 }

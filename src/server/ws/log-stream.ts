@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import { processManager } from "../services/process-manager.js";
+import { sessionManager } from "../services/session-manager.js";
 import type { WsMessage } from "../types.js";
 
 export function setupWebSocket(server: Server) {
@@ -8,6 +9,14 @@ export function setupWebSocket(server: Server) {
 
   // Track which script each client is subscribed to
   const subscriptions = new Map<WebSocket, string>();
+
+  const broadcast = (message: string) => {
+    for (const client of wss.clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    }
+  };
 
   processManager.onLog((id, stream, data) => {
     const message = JSON.stringify({
@@ -33,11 +42,16 @@ export function setupWebSocket(server: Server) {
     } satisfies WsMessage);
 
     // Broadcast status changes to ALL connected clients (not just subscribed)
-    for (const client of wss.clients) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    }
+    broadcast(message);
+  });
+
+  sessionManager.onUpdate((session) => {
+    broadcast(
+      JSON.stringify({
+        type: "session",
+        session,
+      } satisfies WsMessage)
+    );
   });
 
   wss.on("connection", (ws) => {

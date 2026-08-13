@@ -1,8 +1,16 @@
 import { Router } from "express";
 import { processManager } from "../services/process-manager.js";
-import type { AppConfig, PackageInfo } from "../types.js";
+import {
+  removeScript,
+  updateScript,
+} from "../services/package-scripts.js";
+import type { PackageStore } from "../services/package-store.js";
+import type { AppConfig } from "../types.js";
 
-export function createScriptsRouter(packages: PackageInfo[], config: AppConfig): Router {
+export function createScriptsRouter(
+  store: PackageStore,
+  config: AppConfig
+): Router {
   const router = Router();
 
   router.post("/api/scripts/run", (req, res) => {
@@ -11,7 +19,7 @@ export function createScriptsRouter(packages: PackageInfo[], config: AppConfig):
       scriptName: string;
     };
 
-    const pkg = packages.find((p) => p.name === packageName);
+    const pkg = store.find(packageName);
     if (!pkg) {
       res.status(404).json({ error: `Package "${packageName}" not found` });
       return;
@@ -42,6 +50,54 @@ export function createScriptsRouter(packages: PackageInfo[], config: AppConfig):
 
   router.get("/api/scripts/status", (_req, res) => {
     res.json(processManager.getAllStatuses());
+  });
+
+  router.post("/api/scripts/remove", async (req, res) => {
+    const { packageName, scriptName } = req.body as {
+      packageName: string;
+      scriptName: string;
+    };
+
+    const pkg = store.find(packageName);
+    if (!pkg) {
+      res.status(404).json({ error: `Package "${packageName}" not found` });
+      return;
+    }
+
+    try {
+      removeScript(pkg.path, scriptName);
+      const packages = await store.refresh();
+      res.json({ ok: true, packages });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "Failed to remove script",
+      });
+    }
+  });
+
+  router.post("/api/scripts/update", async (req, res) => {
+    const { packageName, scriptName, name, command } = req.body as {
+      packageName: string;
+      scriptName: string;
+      name?: string;
+      command?: string;
+    };
+
+    const pkg = store.find(packageName);
+    if (!pkg) {
+      res.status(404).json({ error: `Package "${packageName}" not found` });
+      return;
+    }
+
+    try {
+      updateScript(pkg.path, scriptName, { name, command });
+      const packages = await store.refresh();
+      res.json({ ok: true, packages });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "Failed to update script",
+      });
+    }
   });
 
   router.post("/api/install", (_req, res) => {

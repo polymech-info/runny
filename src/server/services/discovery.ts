@@ -14,6 +14,19 @@ const IGNORE_DIRS = [
   "**/coverage/**",
 ];
 
+/** Section markers in package.json, e.g. `"--- features ---": "echo ''"`. */
+function filterScripts(
+  scripts: Record<string, string> | undefined
+): Record<string, string> {
+  if (!scripts) return {};
+  const out: Record<string, string> = {};
+  for (const [name, command] of Object.entries(scripts)) {
+    if (name.startsWith("---")) continue;
+    out[name] = command;
+  }
+  return out;
+}
+
 async function getWorkspaceGlobs(
   rootDir: string,
   pm: PackageManager
@@ -55,12 +68,13 @@ export async function discoverPackages(
   const rootPkgPath = path.join(rootDir, "package.json");
   if (fs.existsSync(rootPkgPath)) {
     const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, "utf-8"));
-    if (rootPkg.scripts && Object.keys(rootPkg.scripts).length > 0) {
+    const scripts = filterScripts(rootPkg.scripts);
+    if (Object.keys(scripts).length > 0) {
       packages.push({
         name: rootPkg.name || path.basename(rootDir),
         path: rootDir,
         relativePath: ".",
-        scripts: rootPkg.scripts || {},
+        scripts,
         isRoot: true,
       });
     }
@@ -89,7 +103,7 @@ export async function discoverPackages(
           name: pkg.name || path.basename(pkgDir),
           path: pkgDir,
           relativePath: path.relative(rootDir, pkgDir),
-          scripts: pkg.scripts || {},
+          scripts: filterScripts(pkg.scripts),
           isRoot: false,
         });
       } catch {

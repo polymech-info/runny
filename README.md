@@ -9,13 +9,17 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@icydotdev/runny"><img src="https://img.shields.io/npm/v/@icydotdev/runny.svg?style=flat&colorA=18181B&colorB=6366f1" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/@icydotdev/runny"><img src="https://img.shields.io/npm/dm/@icydotdev/runny.svg?style=flat&colorA=18181B&colorB=6366f1" alt="npm downloads" /></a>
-  <a href="https://github.com/icydotdev/runny/blob/main/LICENSE"><img src="https://img.shields.io/github/license/icydotdev/runny?style=flat&colorA=18181B&colorB=6366f1" alt="license" /></a>
+  <a href="https://www.npmjs.com/package/@polymech/runny"><img src="https://img.shields.io/npm/v/@polymech/runny.svg?style=flat&colorA=18181B&colorB=6366f1" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@polymech/runny"><img src="https://img.shields.io/npm/dm/@polymech/runny.svg?style=flat&colorA=18181B&colorB=6366f1" alt="npm downloads" /></a>
+  <a href="https://github.com/polymech-info/runny/blob/main/LICENSE"><img src="https://img.shields.io/github/license/polymech-info/runny?style=flat&colorA=18181B&colorB=6366f1" alt="license" /></a>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> · <a href="#features">Features</a> · <a href="#screenshots">Screenshots</a> · <a href="#usage">Usage</a> · <a href="#contributing">Contributing</a>
+  Maintained fork of <a href="https://github.com/icydotdev/runny">icydotdev/runny</a> · published as <code>@polymech/runny</code>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> · <a href="#features">Features</a> · <a href="#screenshots">Screenshots</a> · <a href="#usage">Usage</a> · <a href="#soft-ci">Soft CI</a> · <a href="#contributing">Contributing</a>
 </p>
 
 ---
@@ -31,7 +35,7 @@ Works with **npm**, **pnpm**, and **yarn** workspaces. Monorepos with 50 package
 ## Quick Start
 
 ```bash
-npm i -g @icydotdev/runny
+npm i -g @polymech/runny
 cd your-project
 runny
 ```
@@ -41,25 +45,52 @@ That's it. Opens your browser. Every script is right there.
 Or run without installing:
 
 ```bash
-npx @icydotdev/runny
+npx @polymech/runny
 ```
+
+> Original project: [github.com/icydotdev/runny](https://github.com/icydotdev/runny) · npm [`@icydotdev/runny`](https://www.npmjs.com/package/@icydotdev/runny)
 
 ## Features
 
-- **Instant discovery** — Automatically finds every `package.json` in your project, including all workspace packages
-- **One-click run/stop** — Play and stop buttons for each script, with proper process tree cleanup (no orphan processes)
-- **Live terminal output** — Real-time stdout/stderr streaming via WebSocket, rendered with full ANSI color support
-- **Smart script grouping** — Scripts with shared prefixes (`test`, `test:ci`, `test:dev`) are visually grouped together
-- **Favourites** — Star your most-used scripts for quick access across all packages
-- **Dark & light mode** — Respects your system preference, with a manual toggle
-- **Auto-detects your package manager** — pnpm, yarn, or npm — no configuration needed
-- **Monorepo-native** — Built for workspaces. Tested against real monorepos with 20+ packages
-- **Expand/collapse all** — Manage large package lists with one click
-- **Zero config, zero dependencies on your project** — `npx` it and go
+### Core
+
+- **Instant discovery** — Finds every `package.json`, including workspace packages
+- **One-click run/stop** — Process-tree cleanup with [tree-kill](https://www.npmjs.com/package/tree-kill) (no orphans)
+- **Live terminal** — WebSocket stdout/stderr with ANSI colors (xterm.js)
+- **Smart script grouping** — Colon prefixes (`test`, `test:ci`, `test:dev`) nest visually
+- **Dark & light mode** — System preference + manual toggle
+- **Package manager auto-detect** — pnpm, yarn, or npm
+- **Monorepo-native** — Expand/collapse packages; works with Turbo/Nx/Lerna scripts
+- **Zero project deps** — `npx` and go; nothing is uploaded
+
+### Favourites & organisation
+
+- **Favourite groups** — Multiple named lists, reorder groups and scripts by drag-and-drop
+- **Ctrl+drag to duplicate** — Copy a favourite into another group (keep the source)
+- **Mute in a group** — Skip muted scripts when running a favourite list
+- **Custom descriptions** — Hover notes on favourite scripts
+- **Hide scripts** — Tuck away noise from the sidebar
+
+### Soft CI (sequential sessions)
+
+- **Run a colon-group or favourite list sequentially** — fail-fast by default
+- **Session strip** — Live step progress; stop a running session
+- **CLI** — `runny session run …` / `runny session list` for headless soft-CI
+- **Terminal auto-follow** — Active step output stays in view (toggle off via prev/next)
+
+### Terminal & search
+
+- **Stdout / stderr filters** — Toggle streams; preference persisted
+- **Cycle running tasks** — Prev/next in the terminal header, or `Alt+←` / `Alt+→`
+- **Finished markers** — Compact `DONE` / `FAIL` / `SKIP` + relative time on rows
+- **Fuzzy search** — camelCase, `:` `-` `_`, acronyms, and subsequences; matching trees start collapsed
+
+### Packaging
+
+- **Single Rspack client bundle** — one `runny.bundle.js` for publish (`dist/client`)
+- **Local-only** — Express + WebSocket on `127.0.0.1`; no telemetry
 
 ## Screenshots
-
-<!-- TODO: Add actual screenshots after first release -->
 
 <details>
 <summary>Dark mode</summary>
@@ -102,8 +133,26 @@ runny --port 4000
 runny --no-browser
 
 # Via npx (no install)
-npx @icydotdev/runny
+npx @polymech/runny
 ```
+
+### Soft CI
+
+```bash
+# Sequential colon-group (e.g. scripts named build:*, test:*)
+runny session run build --package my-app
+
+# Favourite group by id path
+runny session run favourite:<groupId>
+
+# List recent / active sessions
+runny session list
+
+# Keep going after a failed step
+runny session run test --no-fail-fast
+```
+
+In the UI: use the **Play** control on a script group or favourite group header.
 
 ### Supported project types
 
@@ -120,31 +169,40 @@ npx @icydotdev/runny
 2. It scans your project for `package.json` files based on your workspace config
 3. A React frontend opens in your browser showing all discovered scripts
 4. When you click **Play**, Runny spawns the script as a child process using your package manager
-5. stdout/stderr streams to the browser terminal in real time via WebSocket
+5. stdout/stderr stream to the browser terminal in real time via WebSocket
 6. When you click **Stop**, the entire process tree is killed cleanly — no orphaned processes
 
 Your code is never uploaded anywhere. Everything runs locally on your machine.
 
+Config (favourites, muted scripts, descriptions, theme, etc.) is stored under your user config directory as `runny-config.json`.
+
 ## FAQ
+
+<details>
+<summary><strong>How is this related to the original Runny?</strong></summary>
+
+This repo is a maintained fork of <a href="https://github.com/icydotdev/runny">icydotdev/runny</a>, published on npm as <code>@polymech/runny</code>. Upstream remains available as <a href="https://www.npmjs.com/package/@icydotdev/runny"><code>@icydotdev/runny</code></a>.
+
+</details>
 
 <details>
 <summary><strong>Does this upload my code / phone home?</strong></summary>
 
-No. Runny is a local-only tool. The server runs on `localhost`, the frontend is bundled static assets served from your machine. There are zero network requests to external services.
+No. Runny is a local-only tool. The server runs on `127.0.0.1`, the frontend is bundled static assets served from your machine. There are zero network requests to external services.
 
 </details>
 
 <details>
 <summary><strong>Can I use this in CI?</strong></summary>
 
-Runny is designed as a local development tool, not for CI. Use your package manager's built-in script runners for CI.
+The GUI is aimed at local development. Soft-CI sessions (`runny session run …`) can run sequential script groups headlessly on a machine that has your package manager installed — still not a replacement for your real CI matrix.
 
 </details>
 
 <details>
 <summary><strong>What about long-running scripts like `dev`?</strong></summary>
 
-That's Runny's sweet spot. Start your dev servers, watch processes, and build watchers — see all their output in one place, stop them cleanly with one click.
+That's Runny's sweet spot. Start your dev servers, watch processes, and build watchers — see all their output in one place, stop them cleanly with one click. Use the terminal prev/next controls to jump between running tasks.
 
 </details>
 
@@ -158,36 +216,50 @@ No. Runny uses <a href="https://www.npmjs.com/package/tree-kill">tree-kill</a> t
 <details>
 <summary><strong>Does it work with Turborepo / Nx / Lerna?</strong></summary>
 
-Yes — Runny reads workspace configuration (pnpm-workspace.yaml or the workspaces field in package.json), not your build orchestrator. Your Turbo/Nx scripts appear like any other script and can be run from Runny.
+Yes — Runny reads workspace configuration (`pnpm-workspace.yaml` or the `workspaces` field in `package.json`), not your build orchestrator. Your Turbo/Nx scripts appear like any other script and can be run from Runny.
 
 </details>
 
 ## Roadmap
 
-- [ ] Multi-terminal — view multiple script outputs simultaneously
+- [x] Soft-CI sessions for groups & favourite lists
+- [x] Favourite groups, mute, Ctrl+drag duplicate
+- [x] Terminal stream filters + cycle running tasks
+- [x] Fuzzy search
+- [x] Single Rspack client bundle
+- [ ] Multi-terminal panes (side-by-side)
 - [ ] Keyboard shortcuts (`Ctrl+K` search, arrow navigation, `Enter` to run)
 - [ ] Desktop notifications when scripts finish or error
-- [ ] "Run all" — start a common script across all packages at once
 - [ ] Detect externally-running scripts started outside Runny
 - [ ] Environment variable overrides per script
 
 ## Contributing
 
-Contributions are welcome! Please feel free to open an issue or submit a PR.
+Contributions are welcome — open an issue or PR on [polymech-info/runny](https://github.com/polymech-info/runny). For upstream discussion, see [icydotdev/runny](https://github.com/icydotdev/runny).
 
 ```bash
-git clone https://github.com/icydotdev/runny.git
+git clone https://github.com/polymech-info/runny.git
 cd runny
 npm install
 npm run dev
 ```
 
-This starts the Vite dev server (frontend) and the Express backend concurrently. Set `TARGET_DIR` to point at a project to test against:
+This starts the Express API and the Rspack dev server concurrently. Set `TARGET_DIR` to point at a project to test against:
 
 ```bash
+# Windows (PowerShell)
+$env:TARGET_DIR="C:\path\to\your-monorepo"; npm run dev
+
+# macOS / Linux
 TARGET_DIR=~/your-monorepo npm run dev
+```
+
+Dev UI: `http://127.0.0.1:5173` (proxies `/api` and `/ws` to the API on `:3717`).
+
+```bash
+npm run build   # dist/cli.js + dist/client/runny.bundle.js
 ```
 
 ## License
 
-MIT © [Sam Kavanagh](https://icy.dev)
+MIT © [Sam Kavanagh](https://icy.dev) — original [icydotdev/runny](https://github.com/icydotdev/runny)

@@ -139,6 +139,23 @@ export class ProcessManager {
     return this._spawn(id, packageName, packagePath, scriptName, command);
   }
 
+  /** Run a script and resolve when it exits (passed/errored). */
+  runAndWait(
+    packageName: string,
+    packagePath: string,
+    scriptName: string
+  ): Promise<{ exitCode: number | null; status: ManagedProcess["status"] }> {
+    const id = this.makeId(packageName, scriptName);
+    return new Promise((resolve) => {
+      const unsub = this.onStatus((sid, status, exitCode) => {
+        if (sid !== id || status === "running") return;
+        unsub();
+        resolve({ exitCode, status });
+      });
+      this.run(packageName, packagePath, scriptName);
+    });
+  }
+
   stop(id: string): boolean {
     const managed = this.processes.get(id);
     if (!managed || managed.status !== "running") return false;

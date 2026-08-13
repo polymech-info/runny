@@ -1,33 +1,8 @@
 import { useEffect } from "react";
-import { create } from "zustand";
-
-interface ThemeStore {
-  theme: "light" | "dark";
-  toggle: () => void;
-}
-
-export const useThemeStore = create<ThemeStore>((set) => ({
-  theme:
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light",
-  toggle: () =>
-    set((state) => {
-      const next = state.theme === "dark" ? "light" : "dark";
-      localStorage.setItem("runny-theme", next);
-      return { theme: next };
-    }),
-}));
-
-// Initialize from localStorage if available
-const stored = typeof window !== "undefined" ? localStorage.getItem("runny-theme") : null;
-if (stored === "light" || stored === "dark") {
-  useThemeStore.setState({ theme: stored });
-}
+import { useStore } from "../store/scripts";
 
 export function useTheme() {
-  const theme = useThemeStore((s) => s.theme);
+  const theme = useStore((s) => s.theme);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");

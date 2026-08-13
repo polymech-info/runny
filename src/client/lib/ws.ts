@@ -4,6 +4,7 @@ export class WebSocketManager {
   private ws: WebSocket | null = null;
   private handlers = new Set<MessageHandler>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingSubscribe: string | null = null;
   private url: string;
 
   constructor() {
@@ -12,9 +13,22 @@ export class WebSocketManager {
   }
 
   connect() {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
+    if (
+      this.ws?.readyState === WebSocket.OPEN ||
+      this.ws?.readyState === WebSocket.CONNECTING
+    ) {
+      return;
+    }
 
     this.ws = new WebSocket(this.url);
+
+    this.ws.onopen = () => {
+      if (this.pendingSubscribe && this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(
+          JSON.stringify({ type: "subscribe", id: this.pendingSubscribe })
+        );
+      }
+    };
 
     this.ws.onmessage = (event) => {
       try {
@@ -26,6 +40,7 @@ export class WebSocketManager {
     };
 
     this.ws.onclose = () => {
+      this.ws = null;
       this.reconnectTimer = setTimeout(() => this.connect(), 1000);
     };
 
@@ -36,17 +51,23 @@ export class WebSocketManager {
 
   disconnect() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    this.pendingSubscribe = null;
     this.ws?.close();
     this.ws = null;
   }
 
   subscribe(id: string) {
+    this.pendingSubscribe = id;
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: "subscribe", id }));
+    } else {
+      this.connect();
     }
   }
 
   unsubscribe() {
+    this.pendingSubscribe = null;
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: "unsubscribe" }));
     }

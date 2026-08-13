@@ -1,3 +1,5 @@
+import type { Session } from "../shared/session.js";
+
 export interface PackageInfo {
   name: string;
   path: string;
@@ -27,11 +29,18 @@ export interface AppConfig {
 }
 
 export interface WsMessage {
-  type: "subscribe" | "unsubscribe" | "log" | "status" | "history";
+  type:
+    | "subscribe"
+    | "unsubscribe"
+    | "log"
+    | "status"
+    | "history"
+    | "session";
   id?: string;
   stream?: "stdout" | "stderr";
   data?: string;
   status?: ManagedProcess["status"];
   exitCode?: number | null;
   lines?: Array<{ stream: "stdout" | "stderr"; data: string }>;
+  session?: Session;
 }

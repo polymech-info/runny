@@ -1,7 +1,6 @@
 import React from "react";
 import { Moon, Sun, Download } from "lucide-react";
 import { useStore } from "../store/scripts";
-import { useThemeStore } from "../hooks/useTheme";
 import { runInstall, stopScript } from "../lib/api";
 import logoSvg from "../assets/logo.svg";
 
@@ -9,8 +8,8 @@ const INSTALL_ID = "__runny:install";
 
 export function Header() {
   const config = useStore((s) => s.config);
-  const theme = useThemeStore((s) => s.theme);
-  const toggle = useThemeStore((s) => s.toggle);
+  const theme = useStore((s) => s.theme);
+  const toggle = useStore((s) => s.toggleTheme);
   const selectScript = useStore((s) => s.selectScript);
   const setScriptStatus = useStore((s) => s.setScriptStatus);
   const installState = useStore((s) => s.scriptStates.get(INSTALL_ID));
@@ -37,7 +36,8 @@ export function Header() {
     >
       <div className="flex items-center gap-3">
         <a
-          href="https://www.npmjs.com/package/@icydotdev/runny"
+          href="https://www.npmjs.com/package/@polymech/runny"
+          title="@polymech/runny — fork of icydotdev/runny"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-3 hover:opacity-80 transition-opacity"

@@ -12,6 +12,6 @@
     "rootDir": "src",
     "declaration": false
   },
-  "include": ["src/cli.ts", "src/server/**/*"],
+  "include": ["src/cli.ts", "src/server/**/*", "src/shared/**/*"],
   "exclude": ["node_modules"]
 }
