@@ -87,6 +87,8 @@ interface Store {
     status: ScriptState["status"],
     exitCode?: number | null
   ) => void;
+  /** Drop optimistic/local status (e.g. run request never reached the API). */
+  clearScriptStatus: (id: string) => void;
   upsertSession: (session: Session) => void;
   setSessions: (sessions: Session[]) => void;
   selectScript: (id: string | null) => void;
@@ -179,6 +181,14 @@ export const useStore = create<Store>((set, get) => ({
             ? null
             : (prev?.endedAt ?? null);
       next.set(id, { status, exitCode, endedAt });
+      return { scriptStates: next };
+    }),
+
+  clearScriptStatus: (id) =>
+    set((state) => {
+      if (!state.scriptStates.has(id)) return state;
+      const next = new Map(state.scriptStates);
+      next.delete(id);
       return { scriptStates: next };
     }),
 

@@ -24,7 +24,9 @@ export default function App() {
             borderBottom: "1px solid var(--color-border)",
           }}
         >
-          Cannot reach API ({error}). Is the server on port 3717?
+          Cannot reach API ({error}). Use http://127.0.0.1:3717 for{" "}
+          <code>runny</code>, or keep <code>npm run dev</code> server up on
+          :3717 if you are on :5173.
         </div>
       )}
       {loading && (

@@ -101,6 +101,26 @@ export default (env = {}, argv = {}) => {
             {
               context: ["/api"],
               target: "http://127.0.0.1:3717",
+              changeOrigin: true,
+              // Survive brief API restarts (tsx watch) instead of hard-failing the browser.
+              timeout: 30_000,
+              proxyTimeout: 30_000,
+              onError(err, _req, res) {
+                const r = res;
+                if (
+                  r &&
+                  typeof r.writeHead === "function" &&
+                  !r.headersSent
+                ) {
+                  r.writeHead(502, { "Content-Type": "application/json" });
+                  r.end(
+                    JSON.stringify({
+                      error: "API unreachable (is runny/server on :3717?)",
+                      detail: String(err?.message ?? err),
+                    })
+                  );
+                }
+              },
             },
           ],
         }

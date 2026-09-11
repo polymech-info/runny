@@ -356,9 +356,14 @@ export function ScriptRow({
           onClick={(e) => {
             e.stopPropagation();
             if (isRunning) {
-              stop(packageName, scriptName);
+              void stop(packageName, scriptName).catch((err) => {
+                setError(err instanceof Error ? err.message : String(err));
+              });
             } else {
-              run(packageName, scriptName);
+              void run(packageName, scriptName).catch((err) => {
+                setShowCommand(true);
+                setError(err instanceof Error ? err.message : String(err));
+              });
             }
           }}
           className={`p-1 rounded transition-colors ${
