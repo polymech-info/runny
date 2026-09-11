@@ -203,9 +203,7 @@ export function ScriptRow({
         )}
         <StatusBadge status={status} exitCode={exitCode} />
         <span
-          className={`flex-1 truncate ${
-            isFinished ? "text-[10px] leading-tight" : indent ? "text-xs" : "text-sm"
-          }`}
+          className={`flex-1 truncate ${indent ? "text-xs" : "text-sm"}`}
           style={{
             color:
               status === "passed"

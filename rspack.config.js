@@ -60,6 +60,13 @@ export default (env = {}, argv = {}) => {
       ],
     },
     plugins: [
+      // Rspack HMR already owns /ws. Do not HPM-proxy it — the upgrade
+      // target becomes undefined and the log socket never connects.
+      new rspack.DefinePlugin({
+        __RUNNY_WS_URL__: JSON.stringify(
+          isDev ? "ws://127.0.0.1:3717/ws" : ""
+        ),
+      }),
       new rspack.HtmlRspackPlugin({
         template: path.resolve(__dirname, "src/client/index.html"),
         filename: "index.html",
@@ -94,11 +101,6 @@ export default (env = {}, argv = {}) => {
             {
               context: ["/api"],
               target: "http://127.0.0.1:3717",
-            },
-            {
-              context: ["/ws"],
-              target: "ws://127.0.0.1:3717",
-              ws: true,
             },
           ],
         }

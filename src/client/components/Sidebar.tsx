@@ -1,6 +1,7 @@
 import React, { useCallback, useRef } from "react";
 import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { SearchBar } from "./SearchBar";
+import { Recent } from "./Recent";
 import { Favourites } from "./Favourites";
 import { PackageCard } from "./PackageCard";
 import { useStore } from "../store/scripts";
@@ -105,6 +106,7 @@ export function Sidebar({ emptyHint }: { emptyHint?: string } = {}) {
         )}
       </div>
       <div className="flex-1 overflow-y-auto">
+        <Recent />
         <Favourites />
         {packages.length === 0 ? (
           <div

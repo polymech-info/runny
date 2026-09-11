@@ -8,6 +8,10 @@ export class WebSocketManager {
   private url: string;
 
   constructor() {
+    if (__RUNNY_WS_URL__) {
+      this.url = __RUNNY_WS_URL__;
+      return;
+    }
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     this.url = `${protocol}//${window.location.host}/ws`;
   }

@@ -66,7 +66,7 @@ if (args[0] === "session") {
   }
 
   startServer(targetDir, preferredPort, {
-    // Rspack proxies /api and /ws to 127.0.0.1:3717 — never fall back in source/dev.
+    // Rspack proxies /api to 127.0.0.1:3717; the client WS talks to it directly.
     allowPortFallback: !runningFromSource,
   })
     .then(async ({ port }) => {
