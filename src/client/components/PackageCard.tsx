@@ -3,7 +3,7 @@ import { ChevronDown, Package } from "lucide-react";
 import { ScriptGroupBlock } from "./ScriptGroup";
 import { ScriptRow } from "./ScriptRow";
 import { useStore } from "../store/scripts";
-import { fuzzyScore } from "../lib/fuzzy-search";
+import { fuzzyScoreScript } from "../lib/fuzzy-search";
 import { groupScripts, type ScriptTreeNode } from "../lib/group-scripts";
 import type { PackageInfo } from "../lib/api";
 
@@ -31,7 +31,7 @@ export function PackageCard({ pkg }: PackageCardProps) {
     ? scripts
         .map(([name, command]) => ({
           entry: [name, command] as [string, string],
-          score: fuzzyScore(
+          score: fuzzyScoreScript(
             searchQuery,
             name,
             command,

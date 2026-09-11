@@ -24,6 +24,7 @@ export interface ManagedProcess {
   status: "running" | "stopped" | "errored";
   exitCode: number | null;
   startedAt: number;
+  endedAt?: number | null;
 }
 
 async function getJson<T>(url: string): Promise<T> {

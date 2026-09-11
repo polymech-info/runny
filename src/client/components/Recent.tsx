@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Clock } from "lucide-react";
 import { ScriptRow } from "./ScriptRow";
-import { fuzzyMatch } from "../lib/fuzzy-search";
+import { fuzzyScoreScript } from "../lib/fuzzy-search";
 import { useStore, type ScriptState } from "../store/scripts";
 import type { PackageInfo, Session } from "../lib/api";
 
@@ -95,14 +95,15 @@ export function Recent() {
 
   const query = searchQuery.trim();
   const visible = query
-    ? items.filter((item) =>
-        fuzzyMatch(
-          query,
-          item.scriptName,
-          item.command,
-          descriptions[item.id],
-          item.id
-        )
+    ? items.filter(
+        (item) =>
+          fuzzyScoreScript(
+            query,
+            item.scriptName,
+            item.command,
+            descriptions[item.id],
+            item.id
+          ) > 0
       )
     : items;
 

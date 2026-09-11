@@ -117,6 +117,7 @@ export async function startServer(
   console.log(`[runny] starting (target=${targetDir}, port=${preferredPort})`);
 
   const pm = detectPackageManager(targetDir);
+  processManager.setRoot(targetDir);
   processManager.setPackageManager(pm);
   sessionManager.setRoot(targetDir);
   sessionManager.setPackageManager(pm);

@@ -581,7 +581,9 @@ export const useStore = create<Store>((set, get) => ({
       const next = new Map<string, ScriptState>();
       for (const s of statuses) {
         const endedAt =
-          s.status === "stopped" || s.status === "errored" ? s.startedAt : null;
+          s.status === "stopped" || s.status === "errored"
+            ? (s.endedAt ?? s.startedAt)
+            : null;
         next.set(s.id, { status: s.status, exitCode: s.exitCode, endedAt });
       }
       return { scriptStates: next };

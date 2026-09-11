@@ -18,6 +18,8 @@ export interface ManagedProcess {
   status: "running" | "stopped" | "errored";
   exitCode: number | null;
   startedAt: number;
+  /** When the process finished; null while running. Persisted for Recent. */
+  endedAt?: number | null;
 }
 
 export type PackageManager = "npm" | "pnpm" | "yarn";

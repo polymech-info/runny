@@ -10,7 +10,7 @@ import {
   Square,
 } from "lucide-react";
 import { ScriptRow } from "./ScriptRow";
-import { fuzzyMatch } from "../lib/fuzzy-search";
+import { fuzzyScoreScript } from "../lib/fuzzy-search";
 import { useStore, type FavouriteGroup } from "../store/scripts";
 import {
   favouriteSessionPath,
@@ -30,12 +30,14 @@ function scriptMatchesSearch(
   if (!query.trim()) return true;
   const item = resolveScript(packages, scriptId);
   if (!item) return false;
-  return fuzzyMatch(
-    query,
-    item.scriptName,
-    item.command,
-    descriptions[scriptId],
-    scriptId
+  return (
+    fuzzyScoreScript(
+      query,
+      item.scriptName,
+      item.command,
+      descriptions[scriptId],
+      scriptId
+    ) > 0
   );
 }
 

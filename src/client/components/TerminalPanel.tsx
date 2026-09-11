@@ -153,6 +153,27 @@ export function TerminalPanel() {
     term.open(containerRef.current);
     fitAddon.fit();
 
+    // Range / text select → clipboard (read-only terminal).
+    const copySelection = () => {
+      if (!term.hasSelection()) return;
+      const text = term.getSelection();
+      if (!text) return;
+      void navigator.clipboard.writeText(text).catch(() => {
+        // Clipboard may be denied; selection still works for OS copy.
+      });
+    };
+    const selDisposable = term.onSelectionChange(copySelection);
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== "keydown") return true;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        if (term.hasSelection()) {
+          copySelection();
+          return false;
+        }
+      }
+      return true;
+    });
+
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
     setTerminal(term);
@@ -163,6 +184,7 @@ export function TerminalPanel() {
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      selDisposable.dispose();
       resizeObserver.disconnect();
       term.dispose();
       terminalRef.current = null;

@@ -1,6 +1,10 @@
 /**
  * Fuzzy script search: case-insensitive, camelCase / separator word breaks,
- * compact match (ignoring seps), acronym, ordered word prefixes, subsequence.
+ * compact match (ignoring seps), acronym, ordered word prefixes.
+ *
+ * Subsequence matching is limited to short script *names* — applying it to
+ * long npm command strings caused false hits (e.g. `changelog:next` →
+ * `build:cpp:plugins`).
  */
 
 const SEP_RE = /[:\-_/.]+/;
@@ -56,11 +60,18 @@ function matchAcronym(queryCompact: string, hayWords: string[]): boolean {
   if (initials.startsWith(queryCompact) || initials.includes(queryCompact)) {
     return true;
   }
-  // Allow acronym fuzzy: tma → test : media : api
   return isSubsequence(queryCompact, initials);
 }
 
-function scoreMatch(query: string, hay: string): number {
+type ScoreOpts = {
+  /** Scattered char match — only safe on short names, not long commands. */
+  allowSubsequence?: boolean;
+  allowAcronym?: boolean;
+};
+
+function scoreMatch(query: string, hay: string, opts: ScoreOpts = {}): number {
+  const allowSubsequence = opts.allowSubsequence ?? false;
+  const allowAcronym = opts.allowAcronym ?? true;
   const q = query.trim().toLowerCase();
   if (!q) return 1;
   const lower = hay.toLowerCase();
@@ -77,12 +88,39 @@ function scoreMatch(query: string, hay: string): number {
   const qWords = splitSearchWords(q);
   const hWords = splitSearchWords(hay);
   if (matchWordPrefixes(qWords, hWords)) return 55;
-  if (matchAcronym(qCompact, hWords)) return 45;
-  if (isSubsequence(qCompact, hCompact)) return 30;
+  if (allowAcronym && matchAcronym(qCompact, hWords)) return 45;
+  if (allowSubsequence && isSubsequence(qCompact, hCompact)) return 30;
   return 0;
 }
 
-/** True if query fuzzy-matches any of the provided strings. */
+/** Score a script against name (fuzzy) + command (strict substring only). */
+export function fuzzyScoreScript(
+  query: string,
+  name: string,
+  command?: string | null,
+  description?: string | null,
+  id?: string | null
+): number {
+  const q = query.trim();
+  if (!q) return 1;
+  const nameScore = scoreMatch(q, name, {
+    allowSubsequence: true,
+    allowAcronym: true,
+  });
+  // Commands are long — only contiguous includes, no subsequence/acronym.
+  const cmdScore = command
+    ? scoreMatch(q, command, { allowSubsequence: false, allowAcronym: false })
+    : 0;
+  const descScore = description
+    ? scoreMatch(q, description, { allowSubsequence: true, allowAcronym: true })
+    : 0;
+  const idScore = id
+    ? scoreMatch(q, id, { allowSubsequence: true, allowAcronym: true })
+    : 0;
+  return Math.max(nameScore, cmdScore, descScore, idScore);
+}
+
+/** True if query fuzzy-matches any of the provided strings (name-style). */
 export function fuzzyMatch(
   query: string,
   ...candidates: Array<string | null | undefined>
@@ -100,7 +138,14 @@ export function fuzzyScore(
   let best = 0;
   for (const c of candidates) {
     if (!c) continue;
-    best = Math.max(best, scoreMatch(q, c));
+    // Default: allow subsequence only for short candidates (script names).
+    best = Math.max(
+      best,
+      scoreMatch(q, c, {
+        allowSubsequence: c.length <= 80,
+        allowAcronym: true,
+      })
+    );
   }
   return best;
 }

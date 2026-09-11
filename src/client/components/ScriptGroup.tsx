@@ -22,7 +22,7 @@ interface ScriptGroupProps {
   packageName: string;
   node: ScriptTreeNode;
   depth?: number;
-  /** When searching: keep trees collapsed; expand per-group on demand. */
+  /** When searching: auto-expand groups that contain matches. */
   searchMode?: boolean;
 }
 
@@ -58,10 +58,10 @@ export function ScriptGroupBlock({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Search: start collapsed; local expand only (don't fight persisted tree state).
-  const [searchOpen, setSearchOpen] = useState(false);
+  // Search: start expanded so matches are visible without extra clicks.
+  const [searchOpen, setSearchOpen] = useState(true);
   useEffect(() => {
-    if (searchMode) setSearchOpen(false);
+    if (searchMode) setSearchOpen(true);
   }, [searchMode, key]);
 
   const open = searchMode ? searchOpen : persistedOpen;

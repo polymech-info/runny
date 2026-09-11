@@ -31,6 +31,46 @@ export class SessionManager {
   setRoot(rootPath: string) {
     this.rootPath = rootPath;
     ensureDir(sessionsDir(rootPath));
+    this.loadFromDisk();
+  }
+
+  /** Rehydrate recent soft-CI sessions so Recent / UI survive server restart. */
+  private loadFromDisk() {
+    const dir = sessionsDir(this.rootPath);
+    if (!fs.existsSync(dir)) return;
+    try {
+      const files = fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith(".json"))
+        .map((f) => path.join(dir, f));
+      const loaded: Session[] = [];
+      for (const file of files) {
+        try {
+          const session = JSON.parse(fs.readFileSync(file, "utf-8")) as Session;
+          if (!session?.id || !Array.isArray(session.steps)) continue;
+          // Don't revive mid-flight sessions as running after a crash.
+          if (session.status === "running" || session.status === "queued") {
+            session.status = "cancelled";
+            session.endedAt = session.endedAt ?? Date.now();
+            for (const step of session.steps) {
+              if (step.status === "running" || step.status === "pending") {
+                step.status = "skipped";
+                step.endedAt = step.endedAt ?? Date.now();
+              }
+            }
+          }
+          loaded.push(session);
+        } catch {
+          // skip corrupt
+        }
+      }
+      loaded.sort((a, b) => b.startedAt - a.startedAt);
+      for (const session of loaded.slice(0, 40)) {
+        this.sessions.set(session.id, session);
+      }
+    } catch {
+      // ignore
+    }
   }
 
   setPackageManager(pm: PackageManager) {
