@@ -21,6 +21,8 @@ export interface FavouriteGroup {
   scriptIds: string[];
   /** Scripts kept in the group but skipped when running it. */
   mutedScriptIds?: string[];
+  /** When true, the group body is collapsed in the sidebar. */
+  collapsed?: boolean;
 }
 
 const DEFAULT_GROUP_ID = "default";
@@ -112,6 +114,7 @@ interface Store {
   renameFavouriteGroup: (groupId: string, name: string) => void;
   removeFavouriteGroup: (groupId: string) => void;
   reorderFavouriteGroups: (fromIndex: number, toIndex: number) => void;
+  setFavouriteGroupCollapsed: (groupId: string, collapsed: boolean) => void;
   moveFavouriteScript: (
     scriptId: string,
     fromGroupId: string,
@@ -122,6 +125,12 @@ interface Store {
   copyFavouriteScript: (
     scriptId: string,
     fromGroupId: string,
+    toGroupId: string,
+    toIndex: number
+  ) => void;
+  /** Insert a script into a favourite group (from Recent / packages). No-op if already present. */
+  insertFavouriteScript: (
+    scriptId: string,
     toGroupId: string,
     toIndex: number
   ) => void;
@@ -321,6 +330,7 @@ export const useStore = create<Store>((set, get) => ({
           ? config.favouriteGroups.map((g) => ({
               ...g,
               mutedScriptIds: g.mutedScriptIds ?? [],
+              collapsed: g.collapsed ?? false,
             }))
           : [
               {
@@ -328,6 +338,7 @@ export const useStore = create<Store>((set, get) => ({
                 name: "Favourites",
                 scriptIds: [],
                 mutedScriptIds: [],
+                collapsed: false,
               },
             ],
       scriptDescriptions: config.scriptDescriptions ?? {},
@@ -370,7 +381,13 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => {
       const favouriteGroups = [
         ...state.favouriteGroups,
-        { id: makeId(), name, scriptIds: [], mutedScriptIds: [] },
+        {
+          id: makeId(),
+          name,
+          scriptIds: [],
+          mutedScriptIds: [],
+          collapsed: false,
+        },
       ];
       persist({ ...state, favouriteGroups });
       return { favouriteGroups };
@@ -381,6 +398,15 @@ export const useStore = create<Store>((set, get) => ({
       const trimmed = name.trim() || "Group";
       const favouriteGroups = state.favouriteGroups.map((g) =>
         g.id === groupId ? { ...g, name: trimmed } : g
+      );
+      persist({ ...state, favouriteGroups });
+      return { favouriteGroups };
+    }),
+
+  setFavouriteGroupCollapsed: (groupId, collapsed) =>
+    set((state) => {
+      const favouriteGroups = state.favouriteGroups.map((g) =>
+        g.id === groupId ? { ...g, collapsed } : g
       );
       persist({ ...state, favouriteGroups });
       return { favouriteGroups };
@@ -497,6 +523,24 @@ export const useStore = create<Store>((set, get) => ({
       ) {
         toGroup.mutedScriptIds.push(scriptId);
       }
+
+      persist({ ...state, favouriteGroups });
+      return { favouriteGroups };
+    }),
+
+  insertFavouriteScript: (scriptId, toGroupId, toIndex) =>
+    set((state) => {
+      const favouriteGroups = state.favouriteGroups.map((g) => ({
+        ...g,
+        scriptIds: [...g.scriptIds],
+        mutedScriptIds: [...(g.mutedScriptIds ?? [])],
+      }));
+      const toGroup = favouriteGroups.find((g) => g.id === toGroupId);
+      if (!toGroup) return state;
+      if (toGroup.scriptIds.includes(scriptId)) return state;
+
+      const clamped = Math.max(0, Math.min(toIndex, toGroup.scriptIds.length));
+      toGroup.scriptIds.splice(clamped, 0, scriptId);
 
       persist({ ...state, favouriteGroups });
       return { favouriteGroups };

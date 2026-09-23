@@ -11,6 +11,9 @@ import {
   Check,
   Volume2,
   VolumeX,
+  Eye,
+  EyeOff,
+  ListStart,
 } from "lucide-react";
 import { StatusBadge, type DisplayStatus } from "./StatusBadge";
 import { useScriptRunner } from "../hooks/useScriptRunner";
@@ -22,6 +25,12 @@ import {
   type Session,
   type SessionStep,
 } from "../lib/api";
+import {
+  ContextMenu,
+  useContextMenu,
+  type ContextMenuItem,
+  type ContextMenuLeaf,
+} from "./ui/ContextMenu";
 
 interface ScriptRowProps {
   packageName: string;
@@ -35,6 +44,8 @@ interface ScriptRowProps {
   /** Favourite-group mute: skip this script when running the group. */
   muted?: boolean;
   onToggleMute?: () => void;
+  /** Favourite-group: run this group sequentially starting at this script. */
+  onRunFromHere?: () => void;
   onDragStart?: (e: React.DragEvent) => void;
   onDragEnd?: (e: React.DragEvent) => void;
 }
@@ -48,6 +59,7 @@ export function ScriptRow({
   editableDescription,
   muted,
   onToggleMute,
+  onRunFromHere,
   onDragStart,
   onDragEnd,
 }: ScriptRowProps) {
@@ -59,6 +71,7 @@ export function ScriptRow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const { menu, open: openMenu, close: closeMenu } = useContextMenu();
 
   const { run, stop } = useScriptRunner();
   const id = `${packageName}:${scriptName}`;
@@ -70,10 +83,13 @@ export function ScriptRow({
   const selectScript = useStore((s) => s.selectScript);
   const refreshPackages = useStore((s) => s.refreshPackages);
   const packageManager = useStore((s) => s.config?.packageManager ?? "npm");
+  const favouriteGroups = useStore((s) => s.favouriteGroups);
   const isFavourite = useStore((s) =>
     s.favouriteGroups.some((g) => g.scriptIds.includes(id))
   );
   const toggleFavourite = useStore((s) => s.toggleFavourite);
+  const insertFavouriteScript = useStore((s) => s.insertFavouriteScript);
+  const addFavouriteGroup = useStore((s) => s.addFavouriteGroup);
   const forgetScriptId = useStore((s) => s.forgetScriptId);
   const renameScriptId = useStore((s) => s.renameScriptId);
   const description = useStore((s) => s.scriptDescriptions[id]);
@@ -165,6 +181,158 @@ export function ScriptRow({
     }
   };
 
+  const startEditDescription = () => {
+    setDescDraft(description ?? "");
+    setEditingDesc(true);
+    setEditingScript(false);
+    setShowCommand(true);
+  };
+
+  const startEditScript = () => {
+    setNameDraft(scriptName);
+    setCommandDraft(command);
+    setEditingScript(true);
+    setEditingDesc(false);
+    setShowCommand(true);
+    setError(null);
+  };
+
+  const handleRunOrStop = () => {
+    if (isRunning) {
+      void stop(packageName, scriptName).catch((err) => {
+        setError(err instanceof Error ? err.message : String(err));
+      });
+    } else {
+      void run(packageName, scriptName).catch((err) => {
+        setShowCommand(true);
+        setError(err instanceof Error ? err.message : String(err));
+      });
+    }
+  };
+
+  const buildContextItems = (): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [
+      {
+        id: "run",
+        label: isRunning ? "Stop" : "Run",
+        icon: isRunning ? <Square size={12} /> : <Play size={12} />,
+        onSelect: handleRunOrStop,
+      },
+    ];
+
+    if (onRunFromHere) {
+      items.push({
+        id: "run-from-here",
+        label: "Run from here",
+        icon: <ListStart size={12} />,
+        onSelect: onRunFromHere,
+      });
+    }
+
+    if (onToggleMute) {
+      items.push({
+        id: "mute",
+        label: muted
+          ? "Unmute — include in group run"
+          : "Mute — skip in group run",
+        icon: muted ? <VolumeX size={12} /> : <Volume2 size={12} />,
+        onSelect: onToggleMute,
+      });
+    }
+
+    const groupChildren: ContextMenuLeaf[] = favouriteGroups.map((g) => {
+      const already = g.scriptIds.includes(id);
+      return {
+        id: `group-${g.id}`,
+        label: already ? `${g.name} (already added)` : g.name,
+        icon: (
+          <Star
+            size={12}
+            className={already ? "fill-runny-yellow text-runny-yellow" : ""}
+          />
+        ),
+        disabled: already,
+        onSelect: () => insertFavouriteScript(id, g.id, g.scriptIds.length),
+      };
+    });
+    groupChildren.push(
+      { type: "separator", id: "sep-new-group" },
+      {
+        id: "new-group",
+        label: "New group…",
+        icon: <Star size={12} />,
+        onSelect: () => {
+          addFavouriteGroup("New group");
+          queueMicrotask(() => {
+            const groups = useStore.getState().favouriteGroups;
+            const created = groups[groups.length - 1];
+            if (created) insertFavouriteScript(id, created.id, 0);
+          });
+        },
+      }
+    );
+
+    items.push(
+      { type: "separator", id: "sep-edit" },
+      {
+        id: "edit",
+        label: editableDescription
+          ? "Edit description"
+          : "Edit script in package.json",
+        icon: <Pencil size={12} />,
+        disabled: busy,
+        onSelect: editableDescription ? startEditDescription : startEditScript,
+      },
+      {
+        id: "toggle-command",
+        label: showCommand ? "Hide command" : "Show command",
+        icon: showCommand ? <EyeOff size={12} /> : <Eye size={12} />,
+        onSelect: () => setShowCommand((v) => !v),
+      },
+      { type: "separator", id: "sep-meta" },
+      {
+        type: "submenu",
+        id: "add-to-group",
+        label: "Add to group",
+        icon: <Star size={12} />,
+        children: groupChildren,
+      }
+    );
+
+    if (isFavourite) {
+      items.push({
+        id: "favourite-remove",
+        label: "Remove from all favourites",
+        icon: (
+          <Star
+            size={12}
+            className="fill-runny-yellow text-runny-yellow"
+          />
+        ),
+        onSelect: () => toggleFavourite(id),
+      });
+    }
+
+    items.push(
+      {
+        id: "copy",
+        label: copied ? "Copied" : `Copy \`${runCommand}\``,
+        icon: copied ? <Check size={12} /> : <Copy size={12} />,
+        onSelect: () => void handleCopy(),
+      },
+      {
+        id: "remove",
+        label: "Remove from package.json",
+        icon: <X size={12} />,
+        danger: true,
+        disabled: busy,
+        onSelect: () => void handleRemove(),
+      }
+    );
+
+    return items;
+  };
+
   return (
     <div
       style={{
@@ -177,6 +345,10 @@ export function ScriptRow({
       draggable={draggable && !editing}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onContextMenu={(e) => {
+        if (editing) return;
+        openMenu(e, buildContextItems());
+      }}
       onMouseEnter={(e) => {
         if (!isSelected) e.currentTarget.style.background = "var(--color-hover)";
       }}
@@ -185,6 +357,7 @@ export function ScriptRow({
       }}
       title={editing ? undefined : hoverText}
     >
+      <ContextMenu menu={menu} onClose={closeMenu} />
       <div
         className={`flex items-center gap-2 cursor-pointer ${
           isFinished ? "py-1" : "py-1.5"
@@ -270,10 +443,7 @@ export function ScriptRow({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setDescDraft(description ?? "");
-              setEditingDesc(true);
-              setEditingScript(false);
-              setShowCommand(true);
+              startEditDescription();
             }}
             className="opacity-0 group-hover:opacity-100 p-0.5 transition-opacity"
             style={{ color: "var(--color-muted)" }}
@@ -286,12 +456,7 @@ export function ScriptRow({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setNameDraft(scriptName);
-              setCommandDraft(command);
-              setEditingScript(true);
-              setEditingDesc(false);
-              setShowCommand(true);
-              setError(null);
+              startEditScript();
             }}
             className="opacity-0 group-hover:opacity-100 p-0.5 transition-opacity"
             style={{ color: "var(--color-muted)" }}
@@ -355,16 +520,7 @@ export function ScriptRow({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if (isRunning) {
-              void stop(packageName, scriptName).catch((err) => {
-                setError(err instanceof Error ? err.message : String(err));
-              });
-            } else {
-              void run(packageName, scriptName).catch((err) => {
-                setShowCommand(true);
-                setError(err instanceof Error ? err.message : String(err));
-              });
-            }
+            handleRunOrStop();
           }}
           className={`p-1 rounded transition-colors ${
             isRunning

@@ -9,6 +9,8 @@ export interface FavouriteGroupConfig {
   scriptIds: string[];
   /** Scripts kept in the group but skipped on group run. */
   mutedScriptIds?: string[];
+  /** Sidebar body collapsed. */
+  collapsed?: boolean;
 }
 
 export interface UserConfig {
@@ -77,6 +79,7 @@ function normalizeUserConfig(raw: Partial<UserConfig> | null | undefined): UserC
             name: typeof g.name === "string" && g.name.trim() ? g.name : "Group",
             scriptIds,
             mutedScriptIds,
+            collapsed: g.collapsed === true,
           };
         })
     : structuredClone(DEFAULT_CONFIG.favouriteGroups!);

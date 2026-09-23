@@ -1,6 +1,6 @@
 {
   "name": "@polymech/runny",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A local GUI for running npm/pnpm/yarn scripts across your project",
   "type": "module",
   "bin": {

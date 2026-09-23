@@ -4,6 +4,7 @@ import { ScriptRow } from "./ScriptRow";
 import { fuzzyScoreScript } from "../lib/fuzzy-search";
 import { useStore, type ScriptState } from "../store/scripts";
 import type { PackageInfo, Session } from "../lib/api";
+import { setActiveFavouriteDrag } from "../lib/favourite-dnd";
 
 const MAX_RECENT = 12;
 
@@ -130,6 +131,17 @@ export function Recent() {
             packageName={item.packageName}
             scriptName={item.scriptName}
             command={item.command}
+            draggable
+            onDragStart={(e) => {
+              setActiveFavouriteDrag({
+                kind: "script",
+                scriptId: item.id,
+                fromGroupId: "",
+              });
+              e.dataTransfer.setData("text/plain", item.id);
+              e.dataTransfer.effectAllowed = "copy";
+            }}
+            onDragEnd={() => setActiveFavouriteDrag(null)}
           />
         ))}
       </div>

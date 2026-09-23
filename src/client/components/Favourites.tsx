@@ -20,6 +20,15 @@ import {
   type PackageInfo,
   type Session,
 } from "../lib/api";
+import {
+  ContextMenu,
+  useContextMenu,
+  type ContextMenuItem,
+} from "./ui/ContextMenu";
+import {
+  activeFavouriteDrag,
+  setActiveFavouriteDrag,
+} from "../lib/favourite-dnd";
 
 function scriptMatchesSearch(
   packages: PackageInfo[],
@@ -40,13 +49,6 @@ function scriptMatchesSearch(
     ) > 0
   );
 }
-
-type DragPayload =
-  | { kind: "script"; scriptId: string; fromGroupId: string }
-  | { kind: "group"; groupId: string };
-
-/** In-memory drag state — custom MIME types are unreliable in dragover.types. */
-let activeDrag: DragPayload | null = null;
 
 function resolveScript(
   packages: PackageInfo[],
@@ -73,6 +75,7 @@ function FavouriteScriptRow({
   index,
   muted,
   onDropAt,
+  onRunFromHere,
 }: {
   groupId: string;
   scriptId: string;
@@ -85,6 +88,7 @@ function FavouriteScriptRow({
     index: number,
     copy: boolean
   ) => void;
+  onRunFromHere?: () => void;
 }) {
   const packages = useStore((s) => s.packages);
   const toggleFavouriteMute = useStore((s) => s.toggleFavouriteMute);
@@ -96,12 +100,12 @@ function FavouriteScriptRow({
   return (
     <div
       onDragOver={(e) => {
-        if (!activeDrag || activeDrag.kind !== "script") return;
+        if (!activeFavouriteDrag || activeFavouriteDrag.kind !== "script") return;
         e.preventDefault();
         e.stopPropagation();
-        const copy =
-          e.ctrlKey && activeDrag.fromGroupId !== groupId;
-        e.dataTransfer.dropEffect = copy ? "copy" : "move";
+        // Cross-group = duplicate into target; same-group = reorder.
+        e.dataTransfer.dropEffect =
+          activeFavouriteDrag.fromGroupId !== groupId ? "copy" : "move";
         const rect = e.currentTarget.getBoundingClientRect();
         setDropEdge(e.clientY < rect.top + rect.height / 2 ? "before" : "after");
       }}
@@ -111,18 +115,16 @@ function FavouriteScriptRow({
         e.stopPropagation();
         const edge = dropEdge;
         setDropEdge(null);
-        if (!activeDrag || activeDrag.kind !== "script") return;
+        if (!activeFavouriteDrag || activeFavouriteDrag.kind !== "script") return;
         const insertAt = edge === "after" ? index + 1 : index;
-        const copy =
-          e.ctrlKey && activeDrag.fromGroupId !== groupId;
         onDropAt(
-          activeDrag.scriptId,
-          activeDrag.fromGroupId,
+          activeFavouriteDrag.scriptId,
+          activeFavouriteDrag.fromGroupId,
           groupId,
           insertAt,
-          copy
+          activeFavouriteDrag.fromGroupId !== groupId
         );
-        activeDrag = null;
+        setActiveFavouriteDrag(null);
       }}
       style={{
         opacity: muted ? 0.55 : undefined,
@@ -142,17 +144,18 @@ function FavouriteScriptRow({
         editableDescription
         muted={muted}
         onToggleMute={() => toggleFavouriteMute(groupId, scriptId)}
+        onRunFromHere={onRunFromHere}
         onDragStart={(e) => {
-          activeDrag = {
+          setActiveFavouriteDrag({
             kind: "script",
             scriptId,
             fromGroupId: groupId,
-          };
+          });
           e.dataTransfer.setData("text/plain", scriptId);
           e.dataTransfer.effectAllowed = "copyMove";
         }}
         onDragEnd={() => {
-          activeDrag = null;
+          setActiveFavouriteDrag(null);
         }}
       />
     </div>
@@ -184,22 +187,27 @@ function GroupSection({
   const renameFavouriteGroup = useStore((s) => s.renameFavouriteGroup);
   const removeFavouriteGroup = useStore((s) => s.removeFavouriteGroup);
   const reorderFavouriteGroups = useStore((s) => s.reorderFavouriteGroups);
+  const setFavouriteGroupCollapsed = useStore(
+    (s) => s.setFavouriteGroupCollapsed
+  );
   const moveFavouriteScript = useStore((s) => s.moveFavouriteScript);
   const copyFavouriteScript = useStore((s) => s.copyFavouriteScript);
+  const insertFavouriteScript = useStore((s) => s.insertFavouriteScript);
   const upsertSession = useStore((s) => s.upsertSession);
   const selectScript = useStore((s) => s.selectScript);
   const searchQuery = useStore((s) => s.searchQuery);
   const scriptDescriptions = useStore((s) => s.scriptDescriptions);
   const session = useStore((s) => findFavouriteSession(s.sessions, group.id));
 
-  const [collapsed, setCollapsed] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(group.name);
   const [groupDropActive, setGroupDropActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const { menu, open: openMenu, close: closeMenu } = useContextMenu();
 
+  const collapsed = group.collapsed ?? false;
   const muted = new Set(group.mutedScriptIds ?? []);
   const searching = searchQuery.trim().length > 0;
   const resolvedIds = group.scriptIds.filter(
@@ -223,8 +231,8 @@ function GroupSection({
   // While searching, hide groups with no matches (still allow empty drop target when not searching).
   if (searching && visibleIds.length === 0) return null;
 
-  const handleRun = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRun = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (runnableCount === 0 && !isActive) return;
     setBusy(true);
     setRunError(null);
@@ -248,6 +256,72 @@ function GroupSection({
     }
   };
 
+  const handleRunFrom = async (fromIndex: number) => {
+    if (isActive || busy) return;
+    const fromIds = group.scriptIds
+      .slice(fromIndex)
+      .filter(
+        (id) => resolveScript(packages, id) !== null && !muted.has(id)
+      );
+    if (fromIds.length === 0) return;
+    setBusy(true);
+    setRunError(null);
+    try {
+      const started = await startFavouriteSession(
+        favouriteSessionPath(group.id),
+        fromIds
+      );
+      upsertSession(started);
+      const id = sessionStepScriptId(started);
+      if (id) selectScript(id);
+    } catch (err) {
+      setRunError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startRename = () => {
+    setNameDraft(group.name);
+    setEditingName(true);
+    queueMicrotask(() => nameInputRef.current?.focus());
+  };
+
+  const buildGroupMenuItems = (): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [
+      {
+        id: "run",
+        label: isActive
+          ? "Stop group"
+          : mutedCount > 0
+            ? `Run unmuted (${runnableCount})`
+            : `Run group (${runnableCount})`,
+        icon: isActive ? <Square size={12} /> : <Play size={12} />,
+        disabled: busy || (!isActive && runnableCount === 0),
+        onSelect: () => void handleRun(),
+      },
+      {
+        id: "rename",
+        label: "Rename group",
+        icon: <Pencil size={12} />,
+        onSelect: startRename,
+      },
+    ];
+    if (favouriteGroups.length > 1) {
+      items.push(
+        { type: "separator", id: "sep-del" },
+        {
+          id: "delete",
+          label: "Delete group",
+          icon: <Trash2 size={12} />,
+          danger: true,
+          onSelect: () => removeFavouriteGroup(group.id),
+        }
+      );
+    }
+    return items;
+  };
+
   const handleScriptDrop = (
     scriptId: string,
     fromGroupId: string,
@@ -255,16 +329,21 @@ function GroupSection({
     toIndex: number,
     copy: boolean
   ) => {
-    if (copy && fromGroupId !== toGroupId) {
+    // From Recent / outside favourites — insert into the target group.
+    const fromKnown = favouriteGroups.some((g) => g.id === fromGroupId);
+    if (!fromGroupId || !fromKnown) {
+      insertFavouriteScript(scriptId, toGroupId, toIndex);
+      return;
+    }
+    // Different group → always duplicate (keep source; needed for new groups).
+    if (copy || fromGroupId !== toGroupId) {
       copyFavouriteScript(scriptId, fromGroupId, toGroupId, toIndex);
       return;
     }
     let nextIndex = toIndex;
-    if (fromGroupId === toGroupId) {
-      const from = favouriteGroups.find((g) => g.id === fromGroupId);
-      const fromIndex = from?.scriptIds.indexOf(scriptId) ?? -1;
-      if (fromIndex !== -1 && fromIndex < toIndex) nextIndex -= 1;
-    }
+    const from = favouriteGroups.find((g) => g.id === fromGroupId);
+    const fromIndex = from?.scriptIds.indexOf(scriptId) ?? -1;
+    if (fromIndex !== -1 && fromIndex < toIndex) nextIndex -= 1;
     moveFavouriteScript(scriptId, fromGroupId, toGroupId, nextIndex);
   };
 
@@ -272,12 +351,11 @@ function GroupSection({
     <div
       className="mb-1"
       onDragOver={(e) => {
-        if (!activeDrag) return;
+        if (!activeFavouriteDrag) return;
         e.preventDefault();
         const copy =
-          activeDrag.kind === "script" &&
-          e.ctrlKey &&
-          activeDrag.fromGroupId !== group.id;
+          activeFavouriteDrag.kind === "script" &&
+          activeFavouriteDrag.fromGroupId !== group.id;
         e.dataTransfer.dropEffect = copy ? "copy" : "move";
         setGroupDropActive(true);
       }}
@@ -285,24 +363,22 @@ function GroupSection({
       onDrop={(e) => {
         e.preventDefault();
         setGroupDropActive(false);
-        if (!activeDrag) return;
-        if (activeDrag.kind === "group") {
+        if (!activeFavouriteDrag) return;
+        if (activeFavouriteDrag.kind === "group") {
           const fromIndex = favouriteGroups.findIndex(
-            (g) => g.id === activeDrag!.groupId
+            (g) => g.id === activeFavouriteDrag!.groupId
           );
           if (fromIndex !== -1) reorderFavouriteGroups(fromIndex, index);
-        } else if (activeDrag.kind === "script") {
-          const copy =
-            e.ctrlKey && activeDrag.fromGroupId !== group.id;
+        } else if (activeFavouriteDrag.kind === "script") {
           handleScriptDrop(
-            activeDrag.scriptId,
-            activeDrag.fromGroupId,
+            activeFavouriteDrag.scriptId,
+            activeFavouriteDrag.fromGroupId,
             group.id,
             group.scriptIds.length,
-            copy
+            activeFavouriteDrag.fromGroupId !== group.id
           );
         }
-        activeDrag = null;
+        setActiveFavouriteDrag(null);
       }}
       style={{
         outline: groupDropActive ? "1px dashed #6366f1" : undefined,
@@ -315,19 +391,24 @@ function GroupSection({
         style={{ color: "var(--color-muted)" }}
         draggable={!editingName}
         onDragStart={(e) => {
-          activeDrag = { kind: "group", groupId: group.id };
+          setActiveFavouriteDrag({ kind: "group", groupId: group.id });
           e.dataTransfer.setData("text/plain", group.id);
           e.dataTransfer.effectAllowed = "move";
         }}
         onDragEnd={() => {
-          activeDrag = null;
+          setActiveFavouriteDrag(null);
+        }}
+        onContextMenu={(e) => {
+          if (editingName) return;
+          openMenu(e, buildGroupMenuItems());
         }}
       >
+        <ContextMenu menu={menu} onClose={closeMenu} />
         <span className="cursor-grab active:cursor-grabbing opacity-50">
           <GripVertical size={12} />
         </span>
         <button
-          onClick={() => setCollapsed((c) => !c)}
+          onClick={() => setFavouriteGroupCollapsed(group.id, !collapsed)}
           className="p-0.5"
           title={collapsed ? "Expand" : "Collapse"}
         >
@@ -362,11 +443,7 @@ function GroupSection({
         ) : (
           <button
             className="flex-1 text-left text-xs font-medium uppercase tracking-wider truncate"
-            onDoubleClick={() => {
-              setNameDraft(group.name);
-              setEditingName(true);
-              queueMicrotask(() => nameInputRef.current?.focus());
-            }}
+            onDoubleClick={startRename}
             title="Double-click to rename"
           >
             {group.name}
@@ -405,18 +482,14 @@ function GroupSection({
                 : `Run favourite group sequentially (${runnableCount})`
           }
           disabled={busy || (!isActive && runnableCount === 0)}
-          onClick={handleRun}
+          onClick={(e) => void handleRun(e)}
         >
           {isActive ? <Square size={12} /> : <Play size={12} />}
         </button>
         <button
           className="opacity-0 group-hover/header:opacity-100 p-0.5 hover:text-runny-accent"
           title="Rename group"
-          onClick={() => {
-            setNameDraft(group.name);
-            setEditingName(true);
-            queueMicrotask(() => nameInputRef.current?.focus());
-          }}
+          onClick={startRename}
         >
           <Pencil size={11} />
         </button>
@@ -448,6 +521,17 @@ function GroupSection({
                 }
                 muted={muted.has(scriptId)}
                 onDropAt={handleScriptDrop}
+                onRunFromHere={
+                  isActive || busy
+                    ? undefined
+                    : () => {
+                        const at = searching
+                          ? group.scriptIds.indexOf(scriptId)
+                          : scriptIndex;
+                        if (at < 0) return;
+                        void handleRunFrom(at);
+                      }
+                }
               />
             )
           )}
