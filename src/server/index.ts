@@ -121,6 +121,7 @@ export async function startServer(
   processManager.setPackageManager(pm);
   sessionManager.setRoot(targetDir);
   sessionManager.setPackageManager(pm);
+  processManager.setBusyGate(() => sessionManager.hasActive());
 
   const store = new PackageStore(targetDir, pm);
   const repoName = path.basename(targetDir);

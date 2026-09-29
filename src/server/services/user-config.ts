@@ -24,6 +24,8 @@ export interface UserConfig {
   expandedScriptGroups?: string[];
   /** Hidden script ids (`packageName:scriptName`) removed from the sidebar. */
   hiddenScripts?: string[];
+  /** Script ids whose failure does not stop a group run. */
+  continueOnError?: string[];
 }
 
 const DEFAULT_CONFIG: UserConfig = {
@@ -117,6 +119,12 @@ function normalizeUserConfig(raw: Partial<UserConfig> | null | undefined): UserC
       )
     : [];
 
+  const continueOnError = Array.isArray(raw?.continueOnError)
+    ? raw!.continueOnError!.filter(
+        (k): k is string => typeof k === "string" && k.length > 0
+      )
+    : [];
+
   return {
     version: 1,
     theme,
@@ -129,5 +137,6 @@ function normalizeUserConfig(raw: Partial<UserConfig> | null | undefined): UserC
     scriptDescriptions: descriptions,
     expandedScriptGroups,
     hiddenScripts,
+    continueOnError,
   };
 }

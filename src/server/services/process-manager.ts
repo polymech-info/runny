@@ -20,6 +20,14 @@ type StatusListener = (
   status: ManagedProcess["status"],
   exitCode: number | null
 ) => void;
+type QueueListener = (ids: string[]) => void;
+
+interface QueuedRun {
+  id: string;
+  packageName: string;
+  packagePath: string;
+  scriptName: string;
+}
 
 const MAX_BUFFER_LINES = 1000;
 const MAX_RECENT = 40;
@@ -47,8 +55,16 @@ export class ProcessManager {
   private processes = new Map<string, InternalProcess>();
   private logListeners = new Set<LogListener>();
   private statusListeners = new Set<StatusListener>();
+  private queueListeners = new Set<QueueListener>();
+  private queue: QueuedRun[] = [];
+  /** When true, a group session still owns the runner — don't start queued work. */
+  private busyGate: (() => boolean) | null = null;
   private packageManager: PackageManager = "npm";
   private rootPath = "";
+
+  setBusyGate(gate: () => boolean) {
+    this.busyGate = gate;
+  }
 
   setRoot(rootPath: string) {
     this.rootPath = rootPath;
@@ -168,6 +184,7 @@ export class ProcessManager {
       this.statusListeners.forEach((fn) =>
         fn(id, managed.status, managed.exitCode)
       );
+      this.drainQueue();
     });
 
     child.on("error", () => {
@@ -177,6 +194,7 @@ export class ProcessManager {
       managed.process = undefined;
       this.persistRecent();
       this.statusListeners.forEach((fn) => fn(id, "errored", -1));
+      this.drainQueue();
     });
 
     this.statusListeners.forEach((fn) => fn(id, "running", null));
@@ -263,6 +281,65 @@ export class ProcessManager {
   onStatus(listener: StatusListener) {
     this.statusListeners.add(listener);
     return () => this.statusListeners.delete(listener);
+  }
+
+  queueIds(): string[] {
+    return this.queue.map((item) => item.id);
+  }
+
+  /**
+   * Run after every current process and group session has finished.
+   * Starts immediately when nothing is in flight.
+   */
+  enqueue(
+    packageName: string,
+    packagePath: string,
+    scriptName: string
+  ): string[] {
+    const id = this.makeId(packageName, scriptName);
+    if (!this.queue.some((item) => item.id === id)) {
+      this.queue.push({ id, packageName, packagePath, scriptName });
+      this.emitQueue();
+    }
+    this.drainQueue();
+    return this.queueIds();
+  }
+
+  dequeue(id: string): string[] {
+    const next = this.queue.filter((item) => item.id !== id);
+    if (next.length !== this.queue.length) {
+      this.queue = next;
+      this.emitQueue();
+    }
+    return this.queueIds();
+  }
+
+  /** Start the next queued script when no process or group session is running. */
+  drainQueue() {
+    if (this.queue.length === 0) return;
+    if (this.hasRunning()) return;
+    if (this.busyGate?.()) return;
+    const next = this.queue.shift();
+    if (!next) return;
+    this.emitQueue();
+    this.run(next.packageName, next.packagePath, next.scriptName);
+  }
+
+  private hasRunning(): boolean {
+    for (const managed of this.processes.values()) {
+      if (managed.status === "running") return true;
+    }
+    return false;
+  }
+
+  private emitQueue() {
+    const ids = this.queueIds();
+    this.queueListeners.forEach((fn) => fn(ids));
+  }
+
+  onQueue(listener: QueueListener) {
+    this.queueListeners.add(listener);
+    return () => this.queueListeners.delete(listener);
   }
 
   killAll() {

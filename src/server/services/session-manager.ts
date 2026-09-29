@@ -116,6 +116,8 @@ export class SessionManager {
     groupPath: string;
     scripts: Record<string, string>;
     failFast?: boolean;
+    /** Script ids (`package:script`) that keep the group going after a failure. */
+    continueOnErrorIds?: string[];
   }): Session {
     const entries = Object.entries(opts.scripts).filter(
       ([name]) => !name.startsWith("---")
@@ -135,6 +137,7 @@ export class SessionManager {
         scriptName,
       })),
       failFast: opts.failFast,
+      continueOnErrorIds: opts.continueOnErrorIds,
     });
   }
 
@@ -152,6 +155,7 @@ export class SessionManager {
       scriptName: string;
     }>;
     failFast?: boolean;
+    continueOnErrorIds?: string[];
   }): Session {
     const existing = this.activeForGroup(opts.packageName, opts.groupPath);
     if (existing) {
@@ -165,6 +169,7 @@ export class SessionManager {
     }
 
     const runCmd = getRunCommand(this.packageManager);
+    const continueIds = new Set(opts.continueOnErrorIds ?? []);
     const steps: SessionStep[] = opts.steps.map((step) => ({
       scriptName: step.scriptName,
       packageName: step.packageName,
@@ -174,6 +179,9 @@ export class SessionManager {
       exitCode: null,
       startedAt: null,
       endedAt: null,
+      continueOnError: continueIds.has(
+        `${step.packageName}:${step.scriptName}`
+      ),
     }));
 
     const session: Session = {
@@ -223,7 +231,18 @@ export class SessionManager {
     session.endedAt = Date.now();
     this.persist(session);
     this.emit(session);
+    processManager.drainQueue();
     return cloneSession(session);
+  }
+
+  /** True while a group session still owns the runner. */
+  hasActive(): boolean {
+    for (const session of this.sessions.values()) {
+      if (session.status === "queued" || session.status === "running") {
+        return true;
+      }
+    }
+    return false;
   }
 
   private async runSequential(sessionId: string) {
@@ -264,7 +283,7 @@ export class SessionManager {
       this.persist(session);
       this.emit(session);
 
-      if (!passed && session.failFast) {
+      if (!passed && session.failFast && !step.continueOnError) {
         for (let j = i + 1; j < session.steps.length; j++) {
           session.steps[j].status = "skipped";
           session.steps[j].endedAt = Date.now();
@@ -274,6 +293,7 @@ export class SessionManager {
         this.persist(session);
         this.emit(session);
         this.cancelling.delete(sessionId);
+        processManager.drainQueue();
         return;
       }
     }
@@ -288,6 +308,7 @@ export class SessionManager {
     session.endedAt = Date.now();
     this.persist(session);
     this.emit(session);
+    processManager.drainQueue();
   }
 
   private emit(session: Session) {

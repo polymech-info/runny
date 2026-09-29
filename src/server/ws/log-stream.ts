@@ -54,7 +54,18 @@ export function setupWebSocket(server: Server) {
     );
   });
 
+  processManager.onQueue((ids) => {
+    broadcast(JSON.stringify({ type: "queue", ids } satisfies WsMessage));
+  });
+
   wss.on("connection", (ws) => {
+    ws.send(
+      JSON.stringify({
+        type: "queue",
+        ids: processManager.queueIds(),
+      } satisfies WsMessage)
+    );
+
     ws.on("message", (raw) => {
       try {
         const msg = JSON.parse(raw.toString()) as WsMessage;

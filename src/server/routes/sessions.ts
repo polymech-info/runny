@@ -20,10 +20,11 @@ export function createSessionsRouter(store: PackageStore): Router {
 
   /** Start a sequential soft-CI session for a script group. */
   router.post("/api/sessions/start", (req, res) => {
-    const { packageName, groupPath, failFast } = req.body as {
+    const { packageName, groupPath, failFast, continueOnErrorIds } = req.body as {
       packageName: string;
       groupPath: string;
       failFast?: boolean;
+      continueOnErrorIds?: string[];
     };
 
     if (!packageName || !groupPath) {
@@ -44,6 +45,7 @@ export function createSessionsRouter(store: PackageStore): Router {
         groupPath,
         scripts: pkg.scripts,
         failFast,
+        continueOnErrorIds,
       });
       res.json(session);
     } catch (err) {
@@ -58,10 +60,11 @@ export function createSessionsRouter(store: PackageStore): Router {
    * (`packageName:scriptName`). Used for favourite groups.
    */
   router.post("/api/sessions/start-list", (req, res) => {
-    const { groupPath, scriptIds, failFast } = req.body as {
+    const { groupPath, scriptIds, failFast, continueOnErrorIds } = req.body as {
       groupPath: string;
       scriptIds: string[];
       failFast?: boolean;
+      continueOnErrorIds?: string[];
     };
 
     if (!groupPath || !Array.isArray(scriptIds) || scriptIds.length === 0) {
@@ -109,6 +112,7 @@ export function createSessionsRouter(store: PackageStore): Router {
         groupPath,
         steps,
         failFast,
+        continueOnErrorIds,
       });
       res.json(session);
     } catch (err) {

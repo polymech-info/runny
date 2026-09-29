@@ -1,12 +1,8 @@
 import React from "react";
 import { Check, Minus, X } from "lucide-react";
+import type { DisplayStatus } from "../lib/script-status";
 
-export type DisplayStatus =
-  | "idle"
-  | "running"
-  | "passed"
-  | "failed"
-  | "skipped";
+export type { DisplayStatus };
 
 interface StatusBadgeProps {
   status: DisplayStatus;

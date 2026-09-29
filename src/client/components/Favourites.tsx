@@ -141,6 +141,7 @@ function FavouriteScriptRow({
         scriptName={item.scriptName}
         command={item.command}
         draggable
+        inGroup
         editableDescription
         muted={muted}
         onToggleMute={() => toggleFavouriteMute(groupId, scriptId)}
@@ -243,7 +244,9 @@ function GroupSection({
       } else {
         const started = await startFavouriteSession(
           favouriteSessionPath(group.id),
-          runnableIds
+          runnableIds,
+          true,
+          useStore.getState().continueOnError
         );
         upsertSession(started);
         const id = sessionStepScriptId(started);
@@ -269,7 +272,9 @@ function GroupSection({
     try {
       const started = await startFavouriteSession(
         favouriteSessionPath(group.id),
-        fromIds
+        fromIds,
+        true,
+        useStore.getState().continueOnError
       );
       upsertSession(started);
       const id = sessionStepScriptId(started);

@@ -39,6 +39,7 @@ function persist(state: {
   scriptDescriptions: Record<string, string>;
   expandedScriptGroups: string[];
   hiddenScripts: string[];
+  continueOnError: string[];
   userConfigReady: boolean;
 }) {
   persistUserSettings({
@@ -49,6 +50,7 @@ function persist(state: {
     scriptDescriptions: state.scriptDescriptions,
     expandedScriptGroups: state.expandedScriptGroups,
     hiddenScripts: state.hiddenScripts,
+    continueOnError: state.continueOnError,
     ready: state.userConfigReady,
   });
 }
@@ -78,6 +80,10 @@ interface Store {
   scriptDescriptions: Record<string, string>;
   expandedScriptGroups: string[];
   hiddenScripts: string[];
+  /** Script ids that keep a group run going after they fail. */
+  continueOnError: string[];
+  /** Script ids waiting to run after the current task or group finishes. */
+  runQueue: string[];
   userConfigReady: boolean;
 
   setConfig: (config: AppConfig) => void;
@@ -107,6 +113,8 @@ interface Store {
   hideScript: (id: string) => void;
   unhideScript: (id: string) => void;
   clearHiddenScripts: () => void;
+  toggleContinueOnError: (id: string) => void;
+  setRunQueue: (ids: string[]) => void;
   applyUserConfig: (config: UserConfig) => void;
   isFavourite: (id: string) => boolean;
   toggleFavourite: (id: string) => void;
@@ -134,6 +142,8 @@ interface Store {
     toGroupId: string,
     toIndex: number
   ) => void;
+  /** Remove one script from one favourite group / flow. */
+  removeFavouriteScript: (groupId: string, scriptId: string) => void;
   /** Mute/unmute a script within a favourite group (skipped on group run). */
   toggleFavouriteMute: (groupId: string, scriptId: string) => void;
   setScriptDescription: (id: string, description: string) => void;
@@ -162,6 +172,8 @@ export const useStore = create<Store>((set, get) => ({
   scriptDescriptions: {},
   expandedScriptGroups: [],
   hiddenScripts: [],
+  continueOnError: [],
+  runQueue: [],
   userConfigReady: false,
 
   setConfig: (config) => set({ config }),
@@ -317,6 +329,18 @@ export const useStore = create<Store>((set, get) => ({
       return { hiddenScripts };
     }),
 
+  toggleContinueOnError: (id) =>
+    set((state) => {
+      const has = state.continueOnError.includes(id);
+      const continueOnError = has
+        ? state.continueOnError.filter((s) => s !== id)
+        : [...state.continueOnError, id];
+      persist({ ...state, continueOnError });
+      return { continueOnError };
+    }),
+
+  setRunQueue: (ids) => set({ runQueue: ids }),
+
   applyUserConfig: (config) =>
     set((state) => ({
       theme:
@@ -344,6 +368,7 @@ export const useStore = create<Store>((set, get) => ({
       scriptDescriptions: config.scriptDescriptions ?? {},
       expandedScriptGroups: config.expandedScriptGroups ?? [],
       hiddenScripts: config.hiddenScripts ?? [],
+      continueOnError: config.continueOnError ?? [],
       userConfigReady: true,
     })),
 
@@ -546,6 +571,20 @@ export const useStore = create<Store>((set, get) => ({
       return { favouriteGroups };
     }),
 
+  removeFavouriteScript: (groupId, scriptId) =>
+    set((state) => {
+      const favouriteGroups = state.favouriteGroups.map((g) => {
+        if (g.id !== groupId) return g;
+        return {
+          ...g,
+          scriptIds: g.scriptIds.filter((s) => s !== scriptId),
+          mutedScriptIds: (g.mutedScriptIds ?? []).filter((s) => s !== scriptId),
+        };
+      });
+      persist({ ...state, favouriteGroups });
+      return { favouriteGroups };
+    }),
+
   toggleFavouriteMute: (groupId, scriptId) =>
     set((state) => {
       const favouriteGroups = state.favouriteGroups.map((g) => {
@@ -580,6 +619,7 @@ export const useStore = create<Store>((set, get) => ({
       const scriptDescriptions = { ...state.scriptDescriptions };
       delete scriptDescriptions[id];
       const hiddenScripts = state.hiddenScripts.filter((s) => s !== id);
+      const continueOnError = state.continueOnError.filter((s) => s !== id);
       const selectedScriptId =
         state.selectedScriptId === id ? null : state.selectedScriptId;
       persist({
@@ -587,11 +627,13 @@ export const useStore = create<Store>((set, get) => ({
         favouriteGroups,
         scriptDescriptions,
         hiddenScripts,
+        continueOnError,
       });
       return {
         favouriteGroups,
         scriptDescriptions,
         hiddenScripts,
+        continueOnError,
         selectedScriptId,
       };
     }),
@@ -614,6 +656,9 @@ export const useStore = create<Store>((set, get) => ({
       const hiddenScripts = state.hiddenScripts.map((s) =>
         s === oldId ? newId : s
       );
+      const continueOnError = state.continueOnError.map((s) =>
+        s === oldId ? newId : s
+      );
       const selectedScriptId =
         state.selectedScriptId === oldId ? newId : state.selectedScriptId;
       persist({
@@ -621,11 +666,13 @@ export const useStore = create<Store>((set, get) => ({
         favouriteGroups,
         scriptDescriptions,
         hiddenScripts,
+        continueOnError,
       });
       return {
         favouriteGroups,
         scriptDescriptions,
         hiddenScripts,
+        continueOnError,
         selectedScriptId,
       };
     }),

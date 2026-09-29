@@ -122,6 +122,36 @@ export async function runScript(
   return res.json() as Promise<ManagedProcess>;
 }
 
+export async function fetchRunQueue(): Promise<string[]> {
+  const data = await getJson<{ ids: string[] }>("/api/scripts/queue");
+  return data.ids ?? [];
+}
+
+export async function queueScript(
+  packageName: string,
+  scriptName: string
+): Promise<string[]> {
+  const res = await apiFetch("/api/scripts/queue", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ packageName, scriptName }),
+  });
+  if (!res.ok) throw new Error(await readError(res, "scripts/queue"));
+  const data = (await res.json()) as { ids?: string[] };
+  return data.ids ?? [];
+}
+
+export async function unqueueScript(id: string): Promise<string[]> {
+  const res = await apiFetch("/api/scripts/unqueue", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) throw new Error(await readError(res, "scripts/unqueue"));
+  const data = (await res.json()) as { ids?: string[] };
+  return data.ids ?? [];
+}
+
 export async function stopScript(id: string): Promise<void> {
   const res = await apiFetch("/api/scripts/stop", {
     method: "POST",
@@ -197,6 +227,7 @@ export interface SessionStep {
   exitCode: number | null;
   startedAt: number | null;
   endedAt: number | null;
+  continueOnError?: boolean;
 }
 
 export interface Session {
@@ -220,12 +251,18 @@ export async function fetchSessions(): Promise<Session[]> {
 export async function startGroupSession(
   packageName: string,
   groupPath: string,
-  failFast = true
+  failFast = true,
+  continueOnErrorIds: string[] = []
 ): Promise<Session> {
   const res = await apiFetch("/api/sessions/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ packageName, groupPath, failFast }),
+    body: JSON.stringify({
+      packageName,
+      groupPath,
+      failFast,
+      continueOnErrorIds,
+    }),
   });
   const data = (await res.json()) as Session & { error?: string };
   if (!res.ok) throw new Error(data.error || `sessions/start → ${res.status}`);
@@ -236,12 +273,18 @@ export async function startGroupSession(
 export async function startFavouriteSession(
   groupPath: string,
   scriptIds: string[],
-  failFast = true
+  failFast = true,
+  continueOnErrorIds: string[] = []
 ): Promise<Session> {
   const res = await apiFetch("/api/sessions/start-list", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ groupPath, scriptIds, failFast }),
+    body: JSON.stringify({
+      groupPath,
+      scriptIds,
+      failFast,
+      continueOnErrorIds,
+    }),
   });
   const data = (await res.json()) as Session & { error?: string };
   if (!res.ok) {

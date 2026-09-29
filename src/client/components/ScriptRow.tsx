@@ -14,16 +14,19 @@ import {
   Eye,
   EyeOff,
   ListStart,
+  ListPlus,
+  ArrowRight,
 } from "lucide-react";
-import { StatusBadge, type DisplayStatus } from "./StatusBadge";
+import { StatusBadge } from "./StatusBadge";
 import { useScriptRunner } from "../hooks/useScriptRunner";
 import { formatTimeAgo } from "../lib/relative-time";
-import { useStore, type ScriptState } from "../store/scripts";
+import { latestSessionStep, resolveDisplayStatus } from "../lib/script-status";
+import { useStore } from "../store/scripts";
 import {
+  queueScript,
   removePackageScript,
+  unqueueScript,
   updatePackageScript,
-  type Session,
-  type SessionStep,
 } from "../lib/api";
 import {
   ContextMenu,
@@ -46,6 +49,8 @@ interface ScriptRowProps {
   onToggleMute?: () => void;
   /** Favourite-group: run this group sequentially starting at this script. */
   onRunFromHere?: () => void;
+  /** Row is inside a favourite group or a colon script group. */
+  inGroup?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
   onDragEnd?: (e: React.DragEvent) => void;
 }
@@ -60,6 +65,7 @@ export function ScriptRow({
   muted,
   onToggleMute,
   onRunFromHere,
+  inGroup,
   onDragStart,
   onDragEnd,
 }: ScriptRowProps) {
@@ -94,6 +100,10 @@ export function ScriptRow({
   const renameScriptId = useStore((s) => s.renameScriptId);
   const description = useStore((s) => s.scriptDescriptions[id]);
   const setScriptDescription = useStore((s) => s.setScriptDescription);
+  const continuesOnError = useStore((s) => s.continueOnError.includes(id));
+  const toggleContinueOnError = useStore((s) => s.toggleContinueOnError);
+  const setRunQueue = useStore((s) => s.setRunQueue);
+  const queuePos = useStore((s) => s.runQueue.indexOf(id));
   const [descDraft, setDescDraft] = useState(description ?? "");
 
   const { status, exitCode, endedAt } = resolveDisplayStatus(
@@ -197,6 +207,18 @@ export function ScriptRow({
     setError(null);
   };
 
+  const handleQueue = () => {
+    const op =
+      queuePos >= 0
+        ? unqueueScript(id)
+        : queueScript(packageName, scriptName);
+    void op
+      .then((ids) => setRunQueue(ids))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : String(err));
+      });
+  };
+
   const handleRunOrStop = () => {
     if (isRunning) {
       void stop(packageName, scriptName).catch((err) => {
@@ -218,7 +240,27 @@ export function ScriptRow({
         icon: isRunning ? <Square size={12} /> : <Play size={12} />,
         onSelect: handleRunOrStop,
       },
+      {
+        id: "queue",
+        label:
+          queuePos >= 0
+            ? "Remove from queue"
+            : "Queue — run when current tasks finish",
+        icon: <ListPlus size={12} />,
+        onSelect: handleQueue,
+      },
     ];
+
+    if (inGroup) {
+      items.push({
+        id: "continue-on-error",
+        label: continuesOnError
+          ? "Stop group on error"
+          : "Continue on error",
+        icon: <ArrowRight size={12} />,
+        onSelect: () => toggleContinueOnError(id),
+      });
+    }
 
     if (onRunFromHere) {
       items.push({
@@ -392,6 +434,33 @@ export function ScriptRow({
         >
           {scriptName}
         </span>
+        {continuesOnError && (
+          <span
+            className="shrink-0 inline-flex items-center justify-center rounded"
+            style={{
+              width: 16,
+              height: 16,
+              background: "rgba(245,158,11,0.16)",
+              color: "#d97706",
+            }}
+            title="Continue"
+            aria-label="Continue"
+          >
+            <ArrowRight size={11} />
+          </span>
+        )}
+        {queuePos >= 0 && (
+          <span
+            className="shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide tabular-nums"
+            style={{
+              background: "rgba(99,102,241,0.14)",
+              color: "#6366f1",
+            }}
+            title="Runs when the current task or group finishes"
+          >
+            {queuePos === 0 ? "queued" : `queued ${queuePos + 1}`}
+          </span>
+        )}
         {isFinished && stampLabel && (
           <span
             className="shrink-0 inline-flex items-center gap-1 rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide tabular-nums"
@@ -648,89 +717,4 @@ export function ScriptRow({
       )}
     </div>
   );
-}
-
-/** Most recent session step for this script (covers soft-CI / fav group runs). */
-function latestSessionStep(
-  sessions: Map<string, Session>,
-  packageName: string,
-  scriptName: string
-): SessionStep | undefined {
-  let best: SessionStep | undefined;
-  let bestAt = -1;
-  for (const session of sessions.values()) {
-    for (const step of session.steps) {
-      const pkg = step.packageName ?? session.packageName;
-      if (pkg !== packageName || step.scriptName !== scriptName) continue;
-      const at = step.endedAt ?? step.startedAt ?? session.startedAt;
-      if (at >= bestAt) {
-        bestAt = at;
-        best = step;
-      }
-    }
-  }
-  return best;
-}
-
-function resolveDisplayStatus(
-  scriptState: ScriptState | undefined,
-  sessionStep: SessionStep | undefined
-): {
-  status: DisplayStatus;
-  exitCode: number | null;
-  endedAt: number | null;
-} {
-  // Live process wins while running.
-  if (scriptState?.status === "running") {
-    return { status: "running", exitCode: null, endedAt: null };
-  }
-  if (sessionStep) {
-    if (sessionStep.status === "running") {
-      return { status: "running", exitCode: null, endedAt: null };
-    }
-    if (sessionStep.status === "passed") {
-      return {
-        status: "passed",
-        exitCode: sessionStep.exitCode,
-        endedAt: sessionStep.endedAt ?? scriptState?.endedAt ?? null,
-      };
-    }
-    if (sessionStep.status === "failed") {
-      return {
-        status: "failed",
-        exitCode: sessionStep.exitCode,
-        endedAt: sessionStep.endedAt ?? scriptState?.endedAt ?? null,
-      };
-    }
-    if (sessionStep.status === "skipped") {
-      return {
-        status: "skipped",
-        exitCode: null,
-        endedAt: sessionStep.endedAt ?? scriptState?.endedAt ?? null,
-      };
-    }
-  }
-  if (scriptState?.status === "errored") {
-    return {
-      status: "failed",
-      exitCode: scriptState.exitCode,
-      endedAt: scriptState.endedAt ?? null,
-    };
-  }
-  if (scriptState?.status === "stopped") {
-    const code = scriptState.exitCode;
-    if (code != null && code !== 0) {
-      return {
-        status: "failed",
-        exitCode: code,
-        endedAt: scriptState.endedAt ?? null,
-      };
-    }
-    return {
-      status: "passed",
-      exitCode: code,
-      endedAt: scriptState.endedAt ?? null,
-    };
-  }
-  return { status: "idle", exitCode: null, endedAt: null };
 }

@@ -1,5 +1,6 @@
 import React from "react";
 import { Header } from "./components/Header";
+import { DesignerPanel } from "./components/DesignerPanel";
 import { Sidebar } from "./components/Sidebar";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { useInitialize } from "./hooks/usePackages";
@@ -44,6 +45,7 @@ export default function App() {
         <Sidebar
           emptyHint={loading ? "Loading…" : error ? "API offline" : undefined}
         />
+        <DesignerPanel />
         <TerminalPanel />
       </div>
     </div>

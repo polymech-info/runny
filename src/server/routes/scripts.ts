@@ -36,6 +36,40 @@ export function createScriptsRouter(
     res.json(managed);
   });
 
+  router.get("/api/scripts/queue", (_req, res) => {
+    res.json({ ids: processManager.queueIds() });
+  });
+
+  router.post("/api/scripts/queue", (req, res) => {
+    const { packageName, scriptName } = req.body as {
+      packageName: string;
+      scriptName: string;
+    };
+    const pkg = store.find(packageName);
+    if (!pkg) {
+      res.status(404).json({ error: `Package "${packageName}" not found` });
+      return;
+    }
+    if (!pkg.scripts[scriptName]) {
+      res.status(404).json({
+        error: `Script "${scriptName}" not found in ${packageName}`,
+      });
+      return;
+    }
+    res.json({
+      ids: processManager.enqueue(packageName, pkg.path, scriptName),
+    });
+  });
+
+  router.post("/api/scripts/unqueue", (req, res) => {
+    const { id } = req.body as { id?: string };
+    if (!id) {
+      res.status(400).json({ error: "id is required" });
+      return;
+    }
+    res.json({ ids: processManager.dequeue(id) });
+  });
+
   router.post("/api/scripts/stop", (req, res) => {
     const { id } = req.body as { id: string };
 

@@ -54,7 +54,11 @@ export function useLogStream(
         status?: string;
         exitCode?: number | null;
         session?: Session;
+        ids?: string[];
       };
+      if (msg.type === "queue" && Array.isArray(msg.ids)) {
+        useStore.getState().setRunQueue(msg.ids);
+      }
       if (msg.type === "status" && msg.id) {
         setScriptStatus(
           msg.id,

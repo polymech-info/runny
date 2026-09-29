@@ -13,6 +13,7 @@ export function persistUserSettings(input: {
   scriptDescriptions: Record<string, string>;
   expandedScriptGroups: string[];
   hiddenScripts: string[];
+  continueOnError: string[];
   ready: boolean;
 }) {
   if (!input.ready) return;
@@ -25,6 +26,7 @@ export function persistUserSettings(input: {
       scriptDescriptions: input.scriptDescriptions,
       expandedScriptGroups: input.expandedScriptGroups,
       hiddenScripts: input.hiddenScripts,
+      continueOnError: input.continueOnError,
     })
   );
 }

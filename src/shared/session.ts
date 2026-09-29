@@ -18,6 +18,8 @@ export interface SessionStep {
   exitCode: number | null;
   startedAt: number | null;
   endedAt: number | null;
+  /** When set, a failure of this step does not abort the rest of the group. */
+  continueOnError?: boolean;
 }
 
 export interface Session {

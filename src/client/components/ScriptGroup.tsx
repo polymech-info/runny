@@ -41,6 +41,7 @@ export function ScriptGroupBlock({
           scriptName={node.script[0]}
           command={node.script[1]}
           indent={depth > 0}
+          inGroup={depth > 0}
         />
       </div>
     );
@@ -81,7 +82,12 @@ export function ScriptGroupBlock({
         const stopped = await stopSession(session.id);
         upsertSession(stopped);
       } else {
-        const started = await startGroupSession(packageName, node.path);
+        const started = await startGroupSession(
+          packageName,
+          node.path,
+          true,
+          useStore.getState().continueOnError
+        );
         upsertSession(started);
         const id = sessionStepScriptId(started);
         if (id) selectScript(id);
@@ -158,6 +164,7 @@ export function ScriptGroupBlock({
                   packageName={packageName}
                   scriptName={node.script[0]}
                   command={node.script[1]}
+                  inGroup
                 />
               </div>
               <div className="flex items-center gap-1 pr-2 pt-1.5 shrink-0">

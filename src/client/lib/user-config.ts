@@ -9,6 +9,8 @@ export interface UserConfig {
   scriptDescriptions?: Record<string, string>;
   expandedScriptGroups?: string[];
   hiddenScripts?: string[];
+  /** Script ids (`package:script`) that do not stop a group run on failure. */
+  continueOnError?: string[];
 }
 
 const LEGACY_KEYS = [
@@ -61,6 +63,7 @@ export function migrateLocalStorageUserConfig(
     scriptDescriptions: { ...(fileConfig.scriptDescriptions ?? {}) },
     expandedScriptGroups: [...(fileConfig.expandedScriptGroups ?? [])],
     hiddenScripts: [...(fileConfig.hiddenScripts ?? [])],
+    continueOnError: [...(fileConfig.continueOnError ?? [])],
   };
 
   if (!hasFileFavs) {
@@ -161,6 +164,7 @@ export function buildUserConfigSnapshot(input: {
   scriptDescriptions: Record<string, string>;
   expandedScriptGroups: string[];
   hiddenScripts: string[];
+  continueOnError: string[];
 }): UserConfig {
   return {
     version: 1,
@@ -171,5 +175,6 @@ export function buildUserConfigSnapshot(input: {
     scriptDescriptions: input.scriptDescriptions,
     expandedScriptGroups: input.expandedScriptGroups,
     hiddenScripts: input.hiddenScripts,
+    continueOnError: input.continueOnError,
   };
 }

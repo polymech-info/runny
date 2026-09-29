@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   fetchConfig,
   fetchPackages,
+  fetchRunQueue,
   fetchSessions,
   fetchStatuses,
 } from "../lib/api";
@@ -20,18 +21,19 @@ async function loadWithRetry(attempts = 30, delayMs = 200) {
   let lastError: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      const [config, packages, statuses, userConfig, sessions] =
+      const [config, packages, statuses, userConfig, sessions, runQueue] =
         await Promise.all([
           fetchConfig(),
           fetchPackages(),
           fetchStatuses(),
           fetchUserConfig(),
           fetchSessions(),
+          fetchRunQueue(),
         ]);
       if (!Array.isArray(packages)) {
         throw new Error("Invalid /api/packages response");
       }
-      return { config, packages, statuses, userConfig, sessions };
+      return { config, packages, statuses, userConfig, sessions, runQueue };
     } catch (err) {
       lastError = err;
     }
@@ -48,18 +50,20 @@ export function useInitialize() {
   const initFromStatuses = useStore((s) => s.initFromStatuses);
   const applyUserConfig = useStore((s) => s.applyUserConfig);
   const setSessions = useStore((s) => s.setSessions);
+  const setRunQueue = useStore((s) => s.setRunQueue);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
     loadWithRetry()
-      .then(async ({ config, packages, statuses, userConfig, sessions }) => {
+      .then(async ({ config, packages, statuses, userConfig, sessions, runQueue }) => {
         if (cancelled) return;
         setConfig(config);
         setPackages(packages);
         initFromStatuses(statuses);
         setSessions(sessions);
+        setRunQueue(runQueue);
 
         const migrated = migrateLocalStorageUserConfig(userConfig);
         if (migrated) {
@@ -77,7 +81,7 @@ export function useInitialize() {
     return () => {
       cancelled = true;
     };
-  }, [setConfig, setPackages, initFromStatuses, applyUserConfig, setSessions]);
+  }, [setConfig, setPackages, initFromStatuses, applyUserConfig, setSessions, setRunQueue]);
 
   return { error };
 }

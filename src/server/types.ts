@@ -37,8 +37,10 @@ export interface WsMessage {
     | "log"
     | "status"
     | "history"
-    | "session";
+    | "session"
+    | "queue";
   id?: string;
+  ids?: string[];
   stream?: "stdout" | "stderr";
   data?: string;
   status?: ManagedProcess["status"];
