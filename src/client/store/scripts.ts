@@ -76,6 +76,8 @@ interface Store {
   groupingEnabled: boolean;
   sidebarWidth: number;
   theme: "light" | "dark";
+  /** Pipe view beside the script list. Not persisted. */
+  pipeOpen: boolean;
   favouriteGroups: FavouriteGroup[];
   scriptDescriptions: Record<string, string>;
   expandedScriptGroups: string[];
@@ -109,6 +111,7 @@ interface Store {
   toggleGrouping: () => void;
   setSidebarWidth: (width: number) => void;
   toggleTheme: () => void;
+  setPipeOpen: (open: boolean) => void;
   setScriptGroupExpanded: (groupKey: string, expanded: boolean) => void;
   hideScript: (id: string) => void;
   unhideScript: (id: string) => void;
@@ -166,6 +169,7 @@ export const useStore = create<Store>((set, get) => ({
   groupingEnabled: true,
   sidebarWidth: 320,
   theme: defaultTheme(),
+  pipeOpen: false,
   favouriteGroups: [
     { id: DEFAULT_GROUP_ID, name: "Favourites", scriptIds: [], mutedScriptIds: [] },
   ],
@@ -288,6 +292,8 @@ export const useStore = create<Store>((set, get) => ({
       persist({ ...state, theme });
       return { theme };
     }),
+
+  setPipeOpen: (open) => set({ pipeOpen: open }),
 
   setScriptGroupExpanded: (groupKey, expanded) =>
     set((state) => {

@@ -101,8 +101,10 @@ export async function fetchConfig(): Promise<AppConfig> {
   return getJson<AppConfig>("/api/config");
 }
 
-export async function fetchPackages(): Promise<PackageInfo[]> {
-  return getJson<PackageInfo[]>("/api/packages");
+export async function fetchPackages(refresh = false): Promise<PackageInfo[]> {
+  return getJson<PackageInfo[]>(
+    refresh ? "/api/packages?refresh=1" : "/api/packages"
+  );
 }
 
 export async function fetchStatuses(): Promise<ManagedProcess[]> {

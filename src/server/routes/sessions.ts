@@ -59,7 +59,7 @@ export function createSessionsRouter(store: PackageStore): Router {
    * Start a sequential session from an explicit script id list
    * (`packageName:scriptName`). Used for favourite groups.
    */
-  router.post("/api/sessions/start-list", (req, res) => {
+  router.post("/api/sessions/start-list", async (req, res) => {
     const { groupPath, scriptIds, failFast, continueOnErrorIds } = req.body as {
       groupPath: string;
       scriptIds: string[];
@@ -74,36 +74,35 @@ export function createSessionsRouter(store: PackageStore): Router {
       return;
     }
 
-    const steps: Array<{
-      packageName: string;
-      packagePath: string;
-      scriptName: string;
-    }> = [];
-
-    for (const id of scriptIds) {
-      // script ids are `${packageName}:${scriptName}`; scriptName may contain `:`.
-      let matched:
-        | { packageName: string; packagePath: string; scriptName: string }
-        | undefined;
+    const matchId = (id: string) => {
       for (const pkg of store.packages) {
         const prefix = `${pkg.name}:`;
         if (!id.startsWith(prefix)) continue;
         const scriptName = id.slice(prefix.length);
         if (pkg.scripts[scriptName]) {
-          matched = {
+          return {
             packageName: pkg.name,
             packagePath: pkg.path,
             scriptName,
           };
-          break;
         }
       }
-      if (!matched) {
-        res.status(404).json({ error: `Script "${id}" not found` });
-        return;
-      }
-      steps.push(matched);
+      return undefined;
+    };
+
+    let resolved = scriptIds.map((id) => ({ id, step: matchId(id) }));
+    if (resolved.some((row) => !row.step)) {
+      await store.refresh();
+      resolved = scriptIds.map((id) => ({ id, step: matchId(id) }));
     }
+
+    const missing = resolved.find((row) => !row.step);
+    if (missing) {
+      res.status(404).json({ error: `Script "${missing.id}" not found` });
+      return;
+    }
+
+    const steps = resolved.map((row) => row.step!);
 
     try {
       const session = sessionManager.startSteps({

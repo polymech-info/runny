@@ -1,6 +1,7 @@
 import React from "react";
 import { Header } from "./components/Header";
 import { DesignerPanel } from "./components/DesignerPanel";
+import { PipePanel } from "./components/PipePanel";
 import { Sidebar } from "./components/Sidebar";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { useInitialize } from "./hooks/usePackages";
@@ -11,6 +12,7 @@ export default function App() {
   const { error } = useInitialize();
   useTheme();
   const config = useStore((s) => s.config);
+  const pipeOpen = useStore((s) => s.pipeOpen);
   const loading = !config && !error;
 
   return (
@@ -45,7 +47,7 @@ export default function App() {
         <Sidebar
           emptyHint={loading ? "Loading…" : error ? "API offline" : undefined}
         />
-        <DesignerPanel />
+        {pipeOpen ? <PipePanel /> : <DesignerPanel />}
         <TerminalPanel />
       </div>
     </div>

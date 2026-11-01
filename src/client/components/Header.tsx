@@ -1,5 +1,5 @@
 import React from "react";
-import { Moon, Sun, Download } from "lucide-react";
+import { Boxes, Moon, Sun, Download } from "lucide-react";
 import { useStore } from "../store/scripts";
 import { runInstall, stopScript } from "../lib/api";
 import logoSvg from "../assets/logo.svg";
@@ -13,6 +13,8 @@ export function Header() {
   const selectScript = useStore((s) => s.selectScript);
   const setScriptStatus = useStore((s) => s.setScriptStatus);
   const installState = useStore((s) => s.scriptStates.get(INSTALL_ID));
+  const pipeOpen = useStore((s) => s.pipeOpen);
+  const setPipeOpen = useStore((s) => s.setPipeOpen);
 
   const isInstalling = installState?.status === "running";
 
@@ -57,6 +59,18 @@ export function Header() {
         )}
       </div>
       <div className="flex items-center gap-2">
+        <button
+          onClick={() => setPipeOpen(!pipeOpen)}
+          className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md transition-colors ${
+            pipeOpen ? "bg-runny-accent/15 text-runny-accent" : "hover:bg-runny-accent/10"
+          }`}
+          style={pipeOpen ? undefined : { color: "var(--color-text-secondary)" }}
+          title="Open the release pipe"
+          aria-pressed={pipeOpen}
+        >
+          <Boxes size={13} />
+          Pipe
+        </button>
         {config && (
           <button
             onClick={handleInstall}
