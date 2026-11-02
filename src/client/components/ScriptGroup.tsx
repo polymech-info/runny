@@ -8,6 +8,10 @@ import {
 import { ScriptRow } from "./ScriptRow";
 import { useStore } from "../store/scripts";
 import {
+  beginScriptDrag,
+  endScriptDrag,
+} from "../lib/favourite-dnd";
+import {
   scriptGroupKey,
   type ScriptTreeNode,
 } from "../lib/group-scripts";
@@ -42,6 +46,11 @@ export function ScriptGroupBlock({
           command={node.script[1]}
           indent={depth > 0}
           inGroup={depth > 0}
+          draggable
+          onDragStart={(event) => {
+            beginScriptDrag(event.dataTransfer, [`${packageName}:${node.script![0]}`]);
+          }}
+          onDragEnd={() => endScriptDrag()}
         />
       </div>
     );
@@ -165,6 +174,11 @@ export function ScriptGroupBlock({
                   scriptName={node.script[0]}
                   command={node.script[1]}
                   inGroup
+                  draggable
+                  onDragStart={(event) => {
+                    beginScriptDrag(event.dataTransfer, [`${packageName}:${node.script![0]}`]);
+                  }}
+                  onDragEnd={() => endScriptDrag()}
                 />
               </div>
               <div className="flex items-center gap-1 pr-2 pt-1.5 shrink-0">
@@ -173,8 +187,18 @@ export function ScriptGroupBlock({
             </div>
           ) : (
             <div
-              className="flex items-center gap-2 px-3 py-1.5 text-sm"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-grab"
               style={{ color: "var(--color-text-secondary)" }}
+              draggable
+              title="Drag this group onto a pipe segment"
+              onDragStart={(event) => {
+                event.stopPropagation();
+                beginScriptDrag(
+                  event.dataTransfer,
+                  scriptIdsIn(packageName, node)
+                );
+              }}
+              onDragEnd={() => endScriptDrag()}
             >
               <span className="flex-1 truncate font-medium">{node.label}</span>
               <span
@@ -214,6 +238,13 @@ export function ScriptGroupBlock({
       </CollapsibleContent>
     </Collapsible>
   );
+}
+
+function scriptIdsIn(packageName: string, node: ScriptTreeNode): string[] {
+  const ids: string[] = [];
+  if (node.script) ids.push(`${packageName}:${node.script[0]}`);
+  for (const child of node.children) ids.push(...scriptIdsIn(packageName, child));
+  return ids;
 }
 
 function countScripts(node: ScriptTreeNode): number {

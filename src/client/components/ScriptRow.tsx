@@ -19,8 +19,9 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { useScriptRunner } from "../hooks/useScriptRunner";
-import { formatTimeAgo } from "../lib/relative-time";
+import { formatDuration, formatRunClock, formatTimeAgo } from "../lib/relative-time";
 import { latestSessionStep, resolveDisplayStatus } from "../lib/script-status";
+import { notePipeRename, omitPipeScript } from "../lib/pipe-layout";
 import { useStore } from "../store/scripts";
 import {
   queueScript,
@@ -53,6 +54,12 @@ interface ScriptRowProps {
   inGroup?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
   onDragEnd?: (e: React.DragEvent) => void;
+  /** Extra menu rows, inserted ahead of copy / remove. */
+  extraContextItems?: ContextMenuItem[];
+  /** Name on the first line; actions, last run, and duration on the next. */
+  stacked?: boolean;
+  /** Failure report shown on the second line. */
+  errorReport?: { path: string; onShow: () => void } | null;
 }
 
 export function ScriptRow({
@@ -68,6 +75,9 @@ export function ScriptRow({
   inGroup,
   onDragStart,
   onDragEnd,
+  extraContextItems,
+  stacked,
+  errorReport,
 }: ScriptRowProps) {
   const [showCommand, setShowCommand] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
@@ -119,15 +129,27 @@ export function ScriptRow({
   // Tick so "Xm ago" stays fresh without a global clock store.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!isFinished || endedAt == null) return;
-    const id = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(id);
-  }, [isFinished, endedAt]);
+    const live = Boolean(stacked && isRunning && sessionStep?.startedAt != null);
+    if (!live && (!isFinished || endedAt == null)) return;
+    const timer = window.setInterval(() => setNow(Date.now()), live ? 1000 : 30_000);
+    return () => window.clearInterval(timer);
+  }, [isFinished, endedAt, stacked, isRunning, sessionStep?.startedAt]);
+
+  const startedAt = sessionStep?.startedAt ?? null;
+  const durationMs =
+    startedAt != null && endedAt != null
+      ? endedAt - startedAt
+      : isRunning && startedAt != null
+        ? now - startedAt
+        : null;
+  const durationLabel = formatDuration(durationMs);
+  const runClock = isFinished ? formatRunClock(endedAt, now) : "";
 
   const runCommand = `${packageManager} run ${scriptName}`;
   const ago = isFinished ? formatTimeAgo(endedAt, now) : "";
   const stampLabel =
     status === "passed" ? "done" : status === "failed" ? "fail" : status === "skipped" ? "skip" : "";
+  const quietBtn = stacked ? "opacity-80 hover:opacity-100" : "opacity-0 group-hover:opacity-100";
 
   const handleCopy = async () => {
     try {
@@ -152,6 +174,7 @@ export function ScriptRow({
     try {
       const packages = await removePackageScript(packageName, scriptName);
       forgetScriptId(id);
+      omitPipeScript(scriptName);
       refreshPackages(packages);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -180,6 +203,7 @@ export function ScriptRow({
       });
       if (nextName !== scriptName) {
         renameScriptId(id, `${packageName}:${nextName}`);
+        notePipeRename(scriptName, nextName);
       }
       refreshPackages(packages);
       setEditingScript(false);
@@ -355,6 +379,10 @@ export function ScriptRow({
       });
     }
 
+    if (extraContextItems && extraContextItems.length > 0) {
+      items.push(...extraContextItems);
+    }
+
     items.push(
       {
         id: "copy",
@@ -401,14 +429,23 @@ export function ScriptRow({
     >
       <ContextMenu menu={menu} onClose={closeMenu} />
       <div
-        className={`flex items-center gap-2 cursor-pointer ${
-          isFinished ? "py-1" : "py-1.5"
-        } ${indent ? "pl-6 pr-3" : "px-3"}`}
+        className={
+          stacked
+            ? "flex flex-col min-w-0 px-1 py-0.5"
+            : `flex items-center gap-2 cursor-pointer ${
+                isFinished ? "py-1" : "py-1.5"
+              } ${indent ? "pl-6 pr-3" : "px-3"}`
+        }
         onClick={() => selectScript(id)}
       >
+        <div className={stacked ? "flex items-start gap-1.5 min-w-0" : "contents"}>
         {draggable && (
           <span
-            className="opacity-0 group-hover:opacity-60 cursor-grab active:cursor-grabbing shrink-0"
+            className={
+              stacked
+                ? "opacity-50 cursor-grab active:cursor-grabbing shrink-0 mt-0.5"
+                : "opacity-0 group-hover:opacity-60 cursor-grab active:cursor-grabbing shrink-0 mt-0.5"
+            }
             style={{ color: "var(--color-muted)" }}
             title="Drag to reorder"
             onClick={(e) => e.stopPropagation()}
@@ -418,7 +455,11 @@ export function ScriptRow({
         )}
         <StatusBadge status={status} exitCode={exitCode} />
         <span
-          className={`flex-1 truncate ${indent ? "text-xs" : "text-sm"}`}
+          className={
+            stacked
+              ? "flex-1 min-w-0 break-words text-xs leading-snug"
+              : `flex-1 truncate ${indent ? "text-xs" : "text-sm"}`
+          }
           style={{
             color:
               status === "passed"
@@ -434,6 +475,14 @@ export function ScriptRow({
         >
           {scriptName}
         </span>
+        </div>
+        <div
+          className={
+            stacked
+              ? "flex flex-wrap items-center gap-x-0.5 gap-y-0.5 pl-5 pt-0.5"
+              : "contents"
+          }
+        >
         {continuesOnError && (
           <span
             className="shrink-0 inline-flex items-center justify-center rounded"
@@ -480,12 +529,29 @@ export function ScriptRow({
             }}
             title={
               endedAt
-                ? `${status}${exitCode != null ? ` (exit ${exitCode})` : ""} · ${new Date(endedAt).toLocaleString()}`
+                ? `${status}${exitCode != null ? ` (exit ${exitCode})` : ""} · ${new Date(endedAt).toLocaleString()}${durationLabel ? ` · ${durationLabel}` : ""}`
                 : status
             }
           >
             {stampLabel}
-            {ago ? <span className="font-normal normal-case tracking-normal opacity-80">{ago}</span> : null}
+            {stacked && runClock ? (
+              <span className="font-normal normal-case tracking-normal">{runClock}</span>
+            ) : null}
+            {stacked && durationLabel ? (
+              <span className="font-normal normal-case tracking-normal">{durationLabel}</span>
+            ) : null}
+            {!stacked && ago ? (
+              <span className="font-normal normal-case tracking-normal opacity-80">{ago}</span>
+            ) : null}
+          </span>
+        )}
+        {stacked && isRunning && durationLabel && (
+          <span
+            className="shrink-0 text-[10px] tabular-nums"
+            style={{ color: "#22c55e" }}
+            title="Elapsed"
+          >
+            {durationLabel}
           </span>
         )}
         {onToggleMute && (
@@ -496,7 +562,7 @@ export function ScriptRow({
               onToggleMute();
             }}
             className={`p-0.5 transition-opacity ${
-              muted ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              muted ? "opacity-100" : quietBtn
             }`}
             style={{ color: muted ? "#f59e0b" : "var(--color-muted)" }}
             title={
@@ -514,7 +580,7 @@ export function ScriptRow({
               e.stopPropagation();
               startEditDescription();
             }}
-            className="opacity-0 group-hover:opacity-100 p-0.5 transition-opacity"
+            className={`${quietBtn} p-0.5 transition-opacity`}
             style={{ color: "var(--color-muted)" }}
             title="Edit description"
           >
@@ -527,7 +593,7 @@ export function ScriptRow({
               e.stopPropagation();
               startEditScript();
             }}
-            className="opacity-0 group-hover:opacity-100 p-0.5 transition-opacity"
+            className={`${quietBtn} p-0.5 transition-opacity`}
             style={{ color: "var(--color-muted)" }}
             title="Edit script in package.json"
             disabled={busy}
@@ -540,7 +606,7 @@ export function ScriptRow({
             e.stopPropagation();
             toggleFavourite(id);
           }}
-          className={`p-0.5 transition-opacity ${isFavourite ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+          className={`p-0.5 transition-opacity ${isFavourite ? "opacity-100" : quietBtn}`}
           title={isFavourite ? "Remove from favourites" : "Add to favourites"}
         >
           <Star
@@ -554,7 +620,7 @@ export function ScriptRow({
             e.stopPropagation();
             void handleCopy();
           }}
-          className={`p-0.5 transition-opacity ${copied ? "opacity-100 text-runny-green" : "opacity-0 group-hover:opacity-100"}`}
+          className={`p-0.5 transition-opacity ${copied ? "opacity-100 text-runny-green" : quietBtn}`}
           style={copied ? undefined : { color: "var(--color-muted)" }}
           title={copied ? "Copied" : `Copy \`${runCommand}\``}
         >
@@ -565,7 +631,7 @@ export function ScriptRow({
             e.stopPropagation();
             void handleRemove();
           }}
-          className="opacity-0 group-hover:opacity-100 p-0.5 transition-opacity hover:text-runny-red"
+          className={`${quietBtn} p-0.5 transition-opacity hover:text-runny-red`}
           style={{ color: "var(--color-muted)" }}
           title="Remove from package.json"
           disabled={busy}
@@ -577,7 +643,7 @@ export function ScriptRow({
             e.stopPropagation();
             setShowCommand(!showCommand);
           }}
-          className="opacity-0 group-hover:opacity-100 p-0.5 transition-opacity"
+          className={`${quietBtn} p-0.5 transition-opacity`}
           style={{ color: "var(--color-muted)" }}
           title="Show command"
         >
@@ -600,6 +666,34 @@ export function ScriptRow({
         >
           {isRunning ? <Square size={12} /> : <Play size={12} />}
         </button>
+        {errorReport && (
+          <span className="basis-full flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              className="text-[10px] underline truncate text-left flex-1 min-w-0"
+              style={{ color: "#dc2626" }}
+              title={errorReport.path}
+              onClick={(e) => {
+                e.stopPropagation();
+                errorReport.onShow();
+              }}
+            >
+              {errorReport.path}
+            </button>
+            <button
+              type="button"
+              className="text-[10px] uppercase tracking-wide shrink-0"
+              style={{ color: "#dc2626" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                errorReport.onShow();
+              }}
+            >
+              show
+            </button>
+          </span>
+        )}
+        </div>
       </div>
       {showCommand && (
         <div className="px-3 pb-1.5 pl-7 space-y-1">

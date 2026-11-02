@@ -9,6 +9,7 @@ import { createConfigRouter } from "./routes/config.js";
 import { createUserConfigRouter } from "./routes/user-config.js";
 import { createPackagesRouter } from "./routes/packages.js";
 import { createScriptsRouter } from "./routes/scripts.js";
+import { createReportsRouter } from "./routes/reports.js";
 import { createSessionsRouter } from "./routes/sessions.js";
 import { setupWebSocket } from "./ws/log-stream.js";
 import { userConfigPath } from "./services/user-config.js";
@@ -141,6 +142,7 @@ export async function startServer(
   app.use(createPackagesRouter(store));
   app.use(createScriptsRouter(store, config));
   app.use(createSessionsRouter(store));
+  app.use(createReportsRouter(targetDir));
 
   // Serve static frontend (production). In Rspack dev, the client is on :5173.
   const clientDir = path.join(__dirname, "..", "client");

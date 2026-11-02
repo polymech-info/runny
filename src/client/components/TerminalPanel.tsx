@@ -89,6 +89,9 @@ export function TerminalPanel() {
 
   const selectedLabel = (() => {
     if (!selectedScriptId) return null;
+    if (selectedScriptId.startsWith("__report:")) {
+      return selectedScriptId.slice("__report:".length);
+    }
     if (packages.length <= 1) {
       const colon = selectedScriptId.lastIndexOf(":");
       return colon === -1 ? selectedScriptId : selectedScriptId.slice(colon + 1);

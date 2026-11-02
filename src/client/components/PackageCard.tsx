@@ -2,6 +2,7 @@ import React from "react";
 import { ChevronDown, Package } from "lucide-react";
 import { ScriptGroupBlock } from "./ScriptGroup";
 import { ScriptRow } from "./ScriptRow";
+import { beginScriptDrag, endScriptDrag } from "../lib/favourite-dnd";
 import { useStore } from "../store/scripts";
 import { fuzzyScoreScript } from "../lib/fuzzy-search";
 import { groupScripts, type ScriptTreeNode } from "../lib/group-scripts";
@@ -86,6 +87,11 @@ export function PackageCard({ pkg }: PackageCardProps) {
                 packageName={pkg.name}
                 scriptName={node.script[0]}
                 command={node.script[1]}
+                draggable
+                onDragStart={(event) => {
+                  beginScriptDrag(event.dataTransfer, [`${pkg.name}:${node.script![0]}`]);
+                }}
+                onDragEnd={() => endScriptDrag()}
               />
             )
           )}

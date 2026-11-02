@@ -32,6 +32,9 @@ export function useLogStream(
   streamFilters: TerminalStreamFilters
 ) {
   const selectedScriptId = useStore((s) => s.selectedScriptId);
+  const reportText = useStore((s) =>
+    s.reportView && s.reportView.id === s.selectedScriptId ? s.reportView.text : null
+  );
   const setScriptStatus = useStore((s) => s.setScriptStatus);
   const upsertSession = useStore((s) => s.upsertSession);
   const selectScript = useStore((s) => s.selectScript);
@@ -105,6 +108,16 @@ export function useLogStream(
       return;
     }
 
+    if (selectedScriptId.startsWith("__report:")) {
+      prevIdRef.current = selectedScriptId;
+      bufferRef.current = (reportText ?? "").split(/\r?\n/).map((data) => ({
+        stream: "stdout",
+        data,
+      }));
+      renderFiltered(terminal, bufferRef.current, filtersRef.current);
+      return;
+    }
+
     terminal.clear();
     bufferRef.current = [];
     prevIdRef.current = selectedScriptId;
@@ -144,5 +157,5 @@ export function useLogStream(
     return () => {
       cleanup();
     };
-  }, [selectedScriptId, terminal]);
+  }, [selectedScriptId, terminal, reportText]);
 }

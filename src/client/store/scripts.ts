@@ -69,6 +69,8 @@ interface Store {
   /** Soft-CI sessions keyed by id (backend is source of truth). */
   sessions: Map<string, Session>;
   selectedScriptId: string | null;
+  /** Markdown painted into the terminal when selectedScriptId is a report view. */
+  reportView: { id: string; text: string } | null;
   /** When true, session updates auto-select the active step in the terminal. */
   followActiveSession: boolean;
   searchQuery: string;
@@ -102,6 +104,7 @@ interface Store {
   upsertSession: (session: Session) => void;
   setSessions: (sessions: Session[]) => void;
   selectScript: (id: string | null) => void;
+  showReport: (id: string, text: string) => void;
   /** Cycle terminal selection among currently running scripts. */
   cycleRunningScript: (delta: -1 | 1) => void;
   setFollowActiveSession: (follow: boolean) => void;
@@ -163,6 +166,7 @@ export const useStore = create<Store>((set, get) => ({
   scriptStates: new Map(),
   sessions: new Map(),
   selectedScriptId: null,
+  reportView: null,
   followActiveSession: true,
   searchQuery: "",
   sidebarCollapsed: new Map(),
@@ -231,6 +235,13 @@ export const useStore = create<Store>((set, get) => ({
 
   selectScript: (id) =>
     set({ selectedScriptId: id, followActiveSession: true }),
+
+  showReport: (id, text) =>
+    set({
+      reportView: { id, text },
+      selectedScriptId: id,
+      followActiveSession: false,
+    }),
 
   cycleRunningScript: (delta) =>
     set((state) => {

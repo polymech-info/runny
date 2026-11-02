@@ -246,6 +246,16 @@ export interface Session {
   endedAt: number | null;
 }
 
+export async function fetchPipeReport(rel: string): Promise<string> {
+  const res = await apiFetch(`/api/pipe-report?path=${encodeURIComponent(rel)}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as { text?: string };
+  return body.text ?? "";
+}
+
 export async function fetchSessions(): Promise<Session[]> {
   return getJson<Session[]>("/api/sessions");
 }
