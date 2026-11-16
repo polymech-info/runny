@@ -3,14 +3,23 @@
 const KEY = "runny-pipe-layout";
 const EVENT = "runny-pipe-layout";
 
+export type PipeSegmentFlag = {
+  /** A failure of any script in the segment does not stop the pipe. */
+  continueOnError?: boolean;
+  /** Skipped when the pipe or "run from here" runs. The segment's own Run still starts it. */
+  muted?: boolean;
+};
+
 export type PipeLayout = {
   facets: Record<string, Record<string, string[]>>;
   renames: Record<string, string>;
   omitted: string[];
+  /** releaseId → facetId → flags. */
+  segments: Record<string, Record<string, PipeSegmentFlag>>;
 };
 
 export function emptyPipeLayout(): PipeLayout {
-  return { facets: {}, renames: {}, omitted: [] };
+  return { facets: {}, renames: {}, omitted: [], segments: {} };
 }
 
 export function loadPipeLayout(): PipeLayout {
@@ -18,10 +27,25 @@ export function loadPipeLayout(): PipeLayout {
     const raw = localStorage.getItem(KEY);
     if (!raw) return emptyPipeLayout();
     const parsed = JSON.parse(raw) as Partial<PipeLayout>;
+    const segments: PipeLayout["segments"] = {};
+    if (parsed.segments && typeof parsed.segments === "object") {
+      for (const [releaseId, facets] of Object.entries(parsed.segments)) {
+        if (!facets || typeof facets !== "object") continue;
+        segments[releaseId] = {};
+        for (const [facetId, flag] of Object.entries(facets)) {
+          if (!flag || typeof flag !== "object") continue;
+          segments[releaseId][facetId] = {
+            continueOnError: flag.continueOnError === true,
+            muted: flag.muted === true,
+          };
+        }
+      }
+    }
     return {
       facets: parsed.facets && typeof parsed.facets === "object" ? parsed.facets : {},
       renames: parsed.renames && typeof parsed.renames === "object" ? parsed.renames : {},
       omitted: Array.isArray(parsed.omitted) ? parsed.omitted.filter((n) => typeof n === "string") : [],
+      segments,
     };
   } catch {
     return emptyPipeLayout();

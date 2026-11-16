@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Boxes, Play, Square, X } from "lucide-react";
+import { ArrowRight, Boxes, ListStart, Play, Square, Volume2, VolumeX, X } from "lucide-react";
 import {
   fetchPackages,
   fetchPipeReport,
@@ -22,6 +22,7 @@ import {
   savePipeLayout,
   subscribePipeLayout,
   type PipeLayout,
+  type PipeSegmentFlag,
 } from "../lib/pipe-layout";
 import { resolveDisplayStatus } from "../lib/script-status";
 import { useStore } from "../store/scripts";
@@ -266,7 +267,17 @@ export function PipePanel() {
   const release = RELEASES.find((r) => r.id === releaseId) ?? RELEASES[0];
   const extras = extrasByRelease[release.id] ?? [];
   const namesOf = (facetId: string) => facetScriptNames(release, facetId, extras, layout);
-  const allNames = release.facets.flatMap((facet) => namesOf(facet.id));
+  const segmentFlag = (facetId: string): PipeSegmentFlag =>
+    layout.segments[release.id]?.[facetId] ?? {};
+  const facetsFrom = (facetId: string, skipMuted: boolean) => {
+    const start = release.facets.findIndex((facet) => facet.id === facetId);
+    if (start < 0) return [];
+    return release.facets
+      .slice(start)
+      .filter((facet) => !(skipMuted && segmentFlag(facet.id).muted));
+  };
+  const pipeFacets = facetsFrom(release.facets[0]?.id ?? "", true);
+  const allNames = pipeFacets.flatMap((facet) => namesOf(facet.id));
 
   const writeFacet = (facetId: string, names: string[], sourceFacetId?: string, sourceNames?: string[]) => {
     const next = loadPipeLayout();
@@ -283,6 +294,32 @@ export function PipePanel() {
     next.facets[release.id] = releaseFacets;
     next.omitted = next.omitted.filter((name) => !names.includes(name));
     savePipeLayout(next);
+  };
+
+  const toggleSegment = (facetId: string, key: keyof PipeSegmentFlag) => {
+    const next = loadPipeLayout();
+    const releaseFlags = { ...(next.segments[release.id] ?? {}) };
+    const current = releaseFlags[facetId] ?? {};
+    releaseFlags[facetId] = { ...current, [key]: !current[key] };
+    next.segments[release.id] = releaseFlags;
+    savePipeLayout(next);
+  };
+
+  const continueIdsFor = (names: string[], facetIds: string[]) => {
+    const global = new Set(useStore.getState().continueOnError);
+    const covered = new Set<string>();
+    for (const facetId of facetIds) {
+      if (!segmentFlag(facetId).continueOnError) continue;
+      for (const name of namesOf(facetId)) {
+        if (names.includes(name)) covered.add(name);
+      }
+    }
+    const ids: string[] = [];
+    for (const name of names) {
+      const id = scriptId(packages, name);
+      if (covered.has(name) || global.has(id)) ids.push(id);
+    }
+    return ids;
   };
 
   useEffect(() => subscribePipeLayout(() => setLayout(loadPipeLayout())), []);
@@ -309,7 +346,7 @@ export function PipePanel() {
     )
     .sort((a, b) => b.startedAt - a.startedAt)[0];
 
-  const runScripts = async (groupPath: string, names: string[]) => {
+  const runScripts = async (groupPath: string, names: string[], facetIds: string[]) => {
     if (names.length === 0 || busy) return;
     setBusy(true);
     setError(null);
@@ -318,7 +355,7 @@ export function PipePanel() {
         groupPath,
         names.map((name) => scriptId(packages, name)),
         true,
-        useStore.getState().continueOnError
+        continueIdsFor(names, facetIds)
       );
       upsertSession(started);
       const id = sessionStepScriptId(started);
@@ -417,7 +454,14 @@ export function PipePanel() {
             color: "var(--color-text)",
           }}
           disabled={busy || Boolean(active) || allNames.length === 0}
-          onClick={() => void runScripts(`pipe:${release.id}`, allNames)}
+          title="Run unmuted segments"
+          onClick={() =>
+            void runScripts(
+              `pipe:${release.id}`,
+              allNames,
+              pipeFacets.map((facet) => facet.id)
+            )
+          }
         >
           <Play size={12} />
           Run
@@ -497,6 +541,10 @@ export function PipePanel() {
               row.display.status === "skipped"
           ).length;
           const failed = rows.some((row) => row.display.status === "failed");
+          const muted = Boolean(segmentFlag(facet.id).muted);
+          const continues = Boolean(segmentFlag(facet.id).continueOnError);
+          const tail = facetsFrom(facet.id, true);
+          const fromHere = tail.flatMap((item) => namesOf(item.id));
           const dropHere = (event: React.DragEvent, index: number) => {
             if (!pipeDragActive()) return;
             event.preventDefault();
@@ -537,6 +585,7 @@ export function PipePanel() {
                   dropAt?.facetId === facet.id
                     ? "1px solid #6366f1"
                     : "1px solid var(--color-border)",
+                opacity: muted ? 0.55 : undefined,
               }}
               onDragOver={(event) => {
                 if (!pipeDragActive()) return;
@@ -582,6 +631,59 @@ export function PipePanel() {
                     {done}/{names.length}
                   </span>
                 )}
+                <div className="flex items-center gap-0.5 shrink-0">
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded disabled:opacity-30"
+                  style={{ width: 16, height: 16, color: "var(--color-muted)" }}
+                  title={`Run from ${facet.label}`}
+                  aria-label={`Run from ${facet.label}`}
+                  disabled={fromHere.length === 0 || busy || Boolean(active)}
+                  onClick={() =>
+                    void runScripts(
+                      `pipe:${release.id}`,
+                      fromHere,
+                      tail.map((item) => item.id)
+                    )
+                  }
+                >
+                  <ListStart size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded"
+                  style={{
+                    width: 16,
+                    height: 16,
+                    background: continues ? "rgba(245,158,11,0.16)" : "transparent",
+                    color: continues ? "#d97706" : "var(--color-muted)",
+                  }}
+                  title={
+                    continues
+                      ? "Continuing on error for any script in this segment"
+                      : "Continue on error — any script in this segment"
+                  }
+                  aria-label="Continue on error"
+                  aria-pressed={continues}
+                  onClick={() => toggleSegment(facet.id, "continueOnError")}
+                >
+                  <ArrowRight size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded"
+                  style={{
+                    width: 16,
+                    height: 16,
+                    color: muted ? "#d97706" : "var(--color-muted)",
+                  }}
+                  title={muted ? "Unmute segment" : "Mute — skip this segment when the pipe runs"}
+                  aria-label={muted ? "Unmute segment" : "Mute segment"}
+                  aria-pressed={muted}
+                  onClick={() => toggleSegment(facet.id, "muted")}
+                >
+                  {muted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                </button>
                 <button
                   type="button"
                   className="p-1 rounded hover:opacity-80 disabled:opacity-30"
@@ -591,11 +693,12 @@ export function PipePanel() {
                   disabled={empty || busy || (Boolean(active) && !running)}
                   onClick={() => {
                     if (running && session) void stopActive();
-                    else void runScripts(`pipe:${release.id}:${facet.id}`, names);
+                    else void runScripts(`pipe:${release.id}:${facet.id}`, names, [facet.id]);
                   }}
                 >
                   {running ? <Square size={12} /> : <Play size={12} />}
                 </button>
+                </div>
               </div>
               {empty ? (
                 <p
@@ -648,7 +751,8 @@ export function PipePanel() {
                               onRunFromHere={() =>
                                 void runScripts(
                                   `pipe:${release.id}:${facet.id}`,
-                                  names.slice(index)
+                                  names.slice(index),
+                                  [facet.id]
                                 )
                               }
                               extraContextItems={[
