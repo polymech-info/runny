@@ -55,10 +55,15 @@ function resolveScript(
   id: string
 ): { packageName: string; scriptName: string; command: string } | null {
   for (const pkg of packages) {
-    const prefix = `${pkg.name}:`;
-    if (!id.startsWith(prefix)) continue;
-    const scriptName = id.slice(prefix.length);
-    if (pkg.scripts[scriptName]) {
+    const short = pkg.name.includes("/")
+      ? pkg.name.slice(pkg.name.lastIndexOf("/") + 1)
+      : "";
+    const prefixes = [`${pkg.name}:`];
+    if (short && short !== pkg.name) prefixes.push(`${short}:`);
+    for (const prefix of prefixes) {
+      if (!id.startsWith(prefix)) continue;
+      const scriptName = id.slice(prefix.length);
+      if (!pkg.scripts[scriptName]) continue;
       return {
         packageName: pkg.name,
         scriptName,

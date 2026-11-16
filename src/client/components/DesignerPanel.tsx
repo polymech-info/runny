@@ -47,10 +47,15 @@ function resolveScript(
   id: string
 ): { packageName: string; scriptName: string; command: string } | null {
   for (const pkg of packages) {
-    const prefix = `${pkg.name}:`;
-    if (!id.startsWith(prefix)) continue;
-    const scriptName = id.slice(prefix.length);
-    if (pkg.scripts[scriptName]) {
+    const short = pkg.name.includes("/")
+      ? pkg.name.slice(pkg.name.lastIndexOf("/") + 1)
+      : "";
+    const prefixes = [`${pkg.name}:`];
+    if (short && short !== pkg.name) prefixes.push(`${short}:`);
+    for (const prefix of prefixes) {
+      if (!id.startsWith(prefix)) continue;
+      const scriptName = id.slice(prefix.length);
+      if (!pkg.scripts[scriptName]) continue;
       return {
         packageName: pkg.name,
         scriptName,
@@ -343,7 +348,18 @@ export function DesignerPanel() {
   const stepMenu = (index: number): ContextMenuItem[] => {
     const id = scriptIds[index];
     const resolved = id ? resolveScript(packages, id) : null;
-    if (!id || !resolved || !flow) return [];
+    if (!id || !flow) return [];
+    if (!resolved) {
+      return [
+        {
+          id: "remove",
+          label: "Remove from flow",
+          icon: <X size={12} />,
+          danger: true,
+          onSelect: () => removeFavouriteScript(flow.id, id),
+        },
+      ];
+    }
     const continues = continueOnError.includes(id);
     const queued = runQueue.includes(id);
     return [
