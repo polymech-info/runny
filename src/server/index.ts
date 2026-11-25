@@ -53,7 +53,7 @@ async function listenApp(
     const port = preferredPort + offset;
     for (let attempt = 0; attempt < perPortAttempts; attempt++) {
       const server = createServer(app);
-      setupWebSocket(server);
+      const detachWs = setupWebSocket(server);
       try {
         await new Promise<void>((resolve, reject) => {
           const timer = setTimeout(() => {
@@ -85,6 +85,7 @@ async function listenApp(
         return { server, port };
       } catch (err) {
         lastError = err;
+        detachWs();
         await closeServer(server);
         const code = (err as NodeJS.ErrnoException).code;
         if (
@@ -144,7 +145,7 @@ export async function startServer(
   app.use(createSessionsRouter(store));
   app.use(createReportsRouter(targetDir));
 
-  // Serve static frontend (production). In Rspack dev, the client is on :5173.
+  // Serve static frontend (production). In dev, Rspack serves the client.
   const clientDir = path.join(__dirname, "..", "client");
   app.use(express.static(clientDir));
   app.get("/{*splat}", (_req, res) => {

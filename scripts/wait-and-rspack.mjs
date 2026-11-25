@@ -2,9 +2,10 @@ import net from "node:net";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { DEV_API_PORT } from "./ports.mjs";
 
 const host = "127.0.0.1";
-const port = 3717;
+const port = Number(process.env.RUNNY_API_PORT) || DEV_API_PORT;
 const timeoutMs = 30_000;
 const started = Date.now();
 const adminRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

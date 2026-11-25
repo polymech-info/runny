@@ -3,5 +3,9 @@ declare module "*.svg" {
   export default src;
 }
 
-/** Dev: `ws://127.0.0.1:3717/ws`. Production: empty (same origin). */
+/** Dev: `ws://127.0.0.1:<dev API>/ws`. Production: empty (same origin). */
 declare const __RUNNY_WS_URL__: string;
+/** Dev API port. Production: empty. */
+declare const __RUNNY_DEV_API_PORT__: string;
+/** Dev UI port. Production: empty. */
+declare const __RUNNY_DEV_UI_PORT__: string;

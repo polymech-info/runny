@@ -5,6 +5,7 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import { startServer } from "./server/index.js";
 import { runSessionCli } from "./server/cli/session-cli.js";
+import { BUILD_PORT, DEV_API_PORT, DEV_UI_PORT } from "./shared/ports.js";
 
 const args = process.argv.slice(2);
 
@@ -36,7 +37,9 @@ if (args[0] === "session") {
          runny session <command>
 
   Options:
-    --port <number>   Port to run on (default: 3717)
+    --port <number>   Preferred port (dev API: ${DEV_API_PORT}, runny: ${BUILD_PORT}).
+                      runny steps up when the port is busy; dev uses the next
+                      free API/UI pair (${DEV_API_PORT} / ${DEV_UI_PORT}).
     --no-browser      Don't open the browser automatically
     -h, --help        Show this help message
 
@@ -47,11 +50,24 @@ if (args[0] === "session") {
   process.exit(0);
 } else {
   const portIndex = args.indexOf("--port");
-  const preferredPort =
-    portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : 3717;
+  const fromArg =
+    portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : Number.NaN;
+  const fromEnv = process.env.RUNNY_PORT
+    ? parseInt(process.env.RUNNY_PORT, 10)
+    : Number.NaN;
+  const preferredPort = Number.isFinite(fromArg)
+    ? fromArg
+    : Number.isFinite(fromEnv)
+      ? fromEnv
+      : runningFromSource
+        ? DEV_API_PORT
+        : BUILD_PORT;
+  const devUiPort = Number.isFinite(Number(process.env.RUNNY_UI_PORT))
+    ? Number(process.env.RUNNY_UI_PORT)
+    : DEV_UI_PORT;
 
   // Don't pass --no-browser through `tsx watch` (it can swallow unknown flags).
-  // Source/dev mode never auto-opens the API port — use Rspack on :5173.
+  // Source/dev mode never auto-opens the API port — use the Rspack UI port.
   const noBrowser =
     args.includes("--no-browser") ||
     process.env.RUNNY_NO_BROWSER === "1" ||
@@ -65,16 +81,23 @@ if (args[0] === "session") {
     process.exit(1);
   }
 
+  if (runningFromSource) {
+    console.log(
+      `[runny] dev API :${preferredPort}  UI :${devUiPort}  (build default :${BUILD_PORT})`
+    );
+  }
+
   startServer(targetDir, preferredPort, {
-    // Rspack proxies /api to 127.0.0.1:3717; the client WS talks to it directly.
+    // Dev UI is pinned to this API port by scripts/dev.mjs. The built CLI
+    // serves the UI on the same port and may step upward.
     allowPortFallback: !runningFromSource,
   })
     .then(async ({ port }) => {
       if (noBrowser) return;
-      // Lazy-load: `open` can hang on import when stdout is piped (e.g. concurrently).
+      // Lazy-load: `open` can hang on import when stdout is piped.
       const { default: open } = await import("open");
       const url = runningFromSource
-        ? "http://127.0.0.1:5173"
+        ? `http://127.0.0.1:${devUiPort}`
         : `http://127.0.0.1:${port}`;
       await open(url);
     })

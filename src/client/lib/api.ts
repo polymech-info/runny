@@ -18,7 +18,7 @@ function isTransientNetworkError(err: unknown): boolean {
 
 /**
  * fetch with retries for transient proxy/API blips (tsx watch restart,
- * rspack→3717 ECONNREFUSED, brief event-loop stalls).
+ * rspack proxy ECONNREFUSED, brief event-loop stalls).
  */
 async function apiFetch(
   url: string,
@@ -48,7 +48,11 @@ async function apiFetch(
   const detail =
     lastErr instanceof Error ? lastErr.message : String(lastErr ?? "unknown");
   throw new Error(
-    `Cannot reach API (${url}): ${detail}. If using npm run dev, wait for the server on :3717; for runny use http://127.0.0.1:3717 (not a stale :5173 tab).`
+    `Cannot reach API (${url}): ${detail}. ${
+      __RUNNY_DEV_API_PORT__
+        ? `Dev API is :${__RUNNY_DEV_API_PORT__} (UI :${__RUNNY_DEV_UI_PORT__}).`
+        : "Use the URL this runny process printed."
+    }`
   );
 }
 

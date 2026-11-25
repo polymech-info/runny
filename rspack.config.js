@@ -2,8 +2,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { rspack } from "@rspack/core";
 import { ReactRefreshRspackPlugin } from "@rspack/plugin-react-refresh";
+import { DEV_API_PORT, DEV_UI_PORT } from "./scripts/ports.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const devApiPort = Number(process.env.RUNNY_API_PORT) || DEV_API_PORT;
+const devUiPort = Number(process.env.RUNNY_UI_PORT) || DEV_UI_PORT;
 
 /** Single all-in-one client bundle for npm publish + local `runny`. */
 export default (env = {}, argv = {}) => {
@@ -64,8 +67,10 @@ export default (env = {}, argv = {}) => {
       // target becomes undefined and the log socket never connects.
       new rspack.DefinePlugin({
         __RUNNY_WS_URL__: JSON.stringify(
-          isDev ? "ws://127.0.0.1:3717/ws" : ""
+          isDev ? `ws://127.0.0.1:${devApiPort}/ws` : ""
         ),
+        __RUNNY_DEV_API_PORT__: JSON.stringify(isDev ? String(devApiPort) : ""),
+        __RUNNY_DEV_UI_PORT__: JSON.stringify(isDev ? String(devUiPort) : ""),
       }),
       new rspack.HtmlRspackPlugin({
         template: path.resolve(__dirname, "src/client/index.html"),
@@ -94,13 +99,13 @@ export default (env = {}, argv = {}) => {
     devServer: isDev
       ? {
           host: "127.0.0.1",
-          port: 5173,
+          port: devUiPort,
           hot: true,
           allowedHosts: "all",
           proxy: [
             {
               context: ["/api"],
-              target: "http://127.0.0.1:3717",
+              target: `http://127.0.0.1:${devApiPort}`,
               changeOrigin: true,
               // Survive brief API restarts (tsx watch) instead of hard-failing the browser.
               timeout: 30_000,
@@ -115,7 +120,7 @@ export default (env = {}, argv = {}) => {
                   r.writeHead(502, { "Content-Type": "application/json" });
                   r.end(
                     JSON.stringify({
-                      error: "API unreachable (is runny/server on :3717?)",
+                      error: `API unreachable (is runny/server on :${devApiPort}?)`,
                       detail: String(err?.message ?? err),
                     })
                   );

@@ -27,9 +27,14 @@ export default function App() {
             borderBottom: "1px solid var(--color-border)",
           }}
         >
-          Cannot reach API ({error}). Use http://127.0.0.1:3717 for{" "}
-          <code>runny</code>, or keep <code>npm run dev</code> server up on
-          :3717 if you are on :5173.
+          Cannot reach API ({error}).{" "}
+          {__RUNNY_DEV_API_PORT__ ? (
+            <>
+              Dev UI is :{__RUNNY_DEV_UI_PORT__}; the API is :{__RUNNY_DEV_API_PORT__}.
+            </>
+          ) : (
+            <>Open the URL this <code>runny</code> process printed.</>
+          )}
         </div>
       )}
       {loading && (

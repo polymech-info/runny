@@ -1,6 +1,6 @@
 {
   "name": "@polymech/runny",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A local GUI for running npm/pnpm/yarn scripts across your project",
   "type": "module",
   "bin": {
@@ -12,7 +12,7 @@
   "scripts": {
     "dev:server": "tsx watch --clear-screen=false src/cli.ts",
     "dev:client": "rspack dev --mode development",
-    "dev": "concurrently -k --kill-signal SIGKILL -n server,client -c blue,magenta \"tsx watch --clear-screen=false src/cli.ts\" \"node ./scripts/wait-and-rspack.mjs\"",
+    "dev": "node ./scripts/dev.mjs",
     "build:client": "rspack build --mode production",
     "build:server": "tsc -p tsconfig.server.json",
     "build": "npm run build:client && npm run build:server",

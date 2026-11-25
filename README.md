@@ -126,7 +126,7 @@ npx @polymech/runny
 # Run in current directory
 runny
 
-# Custom port
+# Custom port (steps to the next free port if busy)
 runny --port 4000
 
 # Don't open browser automatically
@@ -254,7 +254,15 @@ $env:TARGET_DIR="C:\path\to\your-monorepo"; npm run dev
 TARGET_DIR=~/your-monorepo npm run dev
 ```
 
-Dev UI: `http://127.0.0.1:5173` (proxies `/api` and `/ws` to the API on `:3717`).
+Dev and the built CLI listen on different ports, and a busy port steps upward (40 tries) so more than one instance can run.
+
+| Mode | Default | If that port is busy |
+| --- | --- | --- |
+| Dev UI (`npm run dev`) | `http://127.0.0.1:6173` | `6174`, `6175`, … |
+| Dev API | `http://127.0.0.1:4717` | `4718`, `4719`, … |
+| Built `runny` | `http://127.0.0.1:3717` | `3718`, `3719`, … |
+
+The dev UI proxies `/api` to the dev API and opens the log socket at `ws://127.0.0.1:<dev API>/ws`. `4717` / `6173` sit 1000 above the build port and the usual `5173` frontend port, so they stay outside those ranges.
 
 ```bash
 npm run build   # dist/cli.js + dist/client/runny.bundle.js

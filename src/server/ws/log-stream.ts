@@ -4,8 +4,11 @@ import { processManager } from "../services/process-manager.js";
 import { sessionManager } from "../services/session-manager.js";
 import type { WsMessage } from "../types.js";
 
-export function setupWebSocket(server: Server) {
+export function setupWebSocket(server: Server): () => void {
   const wss = new WebSocketServer({ server, path: "/ws" });
+  // `ws` re-emits the HTTP server's listen error. With no listener, Node
+  // crashes the process and the next-port fallback never runs.
+  wss.on("error", () => {});
 
   // Track which script each client is subscribed to
   const subscriptions = new Map<WebSocket, string>();
@@ -18,7 +21,7 @@ export function setupWebSocket(server: Server) {
     }
   };
 
-  processManager.onLog((id, stream, data) => {
+  const unsubLog = processManager.onLog((id, stream, data) => {
     const message = JSON.stringify({
       type: "log",
       id,
@@ -33,7 +36,7 @@ export function setupWebSocket(server: Server) {
     }
   });
 
-  processManager.onStatus((id, status, exitCode) => {
+  const unsubStatus = processManager.onStatus((id, status, exitCode) => {
     const message = JSON.stringify({
       type: "status",
       id,
@@ -45,7 +48,7 @@ export function setupWebSocket(server: Server) {
     broadcast(message);
   });
 
-  sessionManager.onUpdate((session) => {
+  const unsubSession = sessionManager.onUpdate((session) => {
     broadcast(
       JSON.stringify({
         type: "session",
@@ -54,7 +57,7 @@ export function setupWebSocket(server: Server) {
     );
   });
 
-  processManager.onQueue((ids) => {
+  const unsubQueue = processManager.onQueue((ids) => {
     broadcast(JSON.stringify({ type: "queue", ids } satisfies WsMessage));
   });
 
@@ -96,4 +99,16 @@ export function setupWebSocket(server: Server) {
       subscriptions.delete(ws);
     });
   });
+
+  return () => {
+    unsubLog();
+    unsubStatus();
+    unsubSession();
+    unsubQueue();
+    try {
+      wss.close();
+    } catch {
+      // ignore
+    }
+  };
 }
