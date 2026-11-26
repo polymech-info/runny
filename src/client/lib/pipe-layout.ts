@@ -10,16 +10,30 @@ export type PipeSegmentFlag = {
   muted?: boolean;
 };
 
+export type PipeCustomSegment = {
+  id: string;
+  label: string;
+};
+
 export type PipeLayout = {
   facets: Record<string, Record<string, string[]>>;
   renames: Record<string, string>;
   omitted: string[];
   /** releaseId → facetId → flags. */
   segments: Record<string, Record<string, PipeSegmentFlag>>;
+  /** releaseId → user segments. They run and reorder with the built-in ones. */
+  custom: Record<string, PipeCustomSegment[]>;
+  /** releaseId → facet ids, built-in and custom, in run order. */
+  order: Record<string, string[]>;
 };
 
+function readNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
 export function emptyPipeLayout(): PipeLayout {
-  return { facets: {}, renames: {}, omitted: [], segments: {} };
+  return { facets: {}, renames: {}, omitted: [], segments: {}, custom: {}, order: {} };
 }
 
 export function loadPipeLayout(): PipeLayout {
@@ -41,11 +55,32 @@ export function loadPipeLayout(): PipeLayout {
         }
       }
     }
+    const custom: PipeLayout["custom"] = {};
+    if (parsed.custom && typeof parsed.custom === "object") {
+      for (const [releaseId, items] of Object.entries(parsed.custom)) {
+        if (!Array.isArray(items)) continue;
+        custom[releaseId] = items.flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const id = "id" in item && typeof item.id === "string" ? item.id : "";
+          const label = "label" in item && typeof item.label === "string" ? item.label.trim() : "";
+          return id && label ? [{ id, label }] : [];
+        });
+      }
+    }
+    const order: PipeLayout["order"] = {};
+    if (parsed.order && typeof parsed.order === "object") {
+      for (const [releaseId, ids] of Object.entries(parsed.order)) {
+        const names = readNames(ids);
+        if (names.length > 0) order[releaseId] = names;
+      }
+    }
     return {
       facets: parsed.facets && typeof parsed.facets === "object" ? parsed.facets : {},
       renames: parsed.renames && typeof parsed.renames === "object" ? parsed.renames : {},
       omitted: Array.isArray(parsed.omitted) ? parsed.omitted.filter((n) => typeof n === "string") : [],
       segments,
+      custom,
+      order,
     };
   } catch {
     return emptyPipeLayout();

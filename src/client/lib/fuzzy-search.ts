@@ -7,7 +7,7 @@
  * `build:cpp:plugins`).
  */
 
-const SEP_RE = /[:\-_/.]+/;
+const SEP_RE = /[:\-_/.]+/g;
 
 /** Split on separators and camelCase boundaries. */
 export function splitSearchWords(input: string): string[] {
@@ -67,6 +67,8 @@ type ScoreOpts = {
   /** Scattered char match — only safe on short names, not long commands. */
   allowSubsequence?: boolean;
   allowAcronym?: boolean;
+  /** Rank when every query word equals a whole haystack word. */
+  wordRank?: number;
 };
 
 function scoreMatch(query: string, hay: string, opts: ScoreOpts = {}): number {
@@ -77,6 +79,13 @@ function scoreMatch(query: string, hay: string, opts: ScoreOpts = {}): number {
   const lower = hay.toLowerCase();
   if (lower === q) return 100;
   if (lower.startsWith(q)) return 90;
+
+  const qWords = splitSearchWords(q);
+  const hWords = splitSearchWords(hay);
+  // "anne" is its own word in deploy:store:anne, and only a scrap inside planner / scanner.
+  if (qWords.length > 0 && qWords.every((word) => hWords.includes(word))) {
+    return opts.wordRank ?? 88;
+  }
   if (lower.includes(q)) return 80;
 
   const qCompact = compact(q);
@@ -85,8 +94,6 @@ function scoreMatch(query: string, hay: string, opts: ScoreOpts = {}): number {
   if (hCompact.startsWith(qCompact)) return 70;
   if (hCompact.includes(qCompact)) return 60;
 
-  const qWords = splitSearchWords(q);
-  const hWords = splitSearchWords(hay);
   if (matchWordPrefixes(qWords, hWords)) return 55;
   if (allowAcronym && matchAcronym(qCompact, hWords)) return 45;
   if (allowSubsequence && isSubsequence(qCompact, hCompact)) return 30;
@@ -108,8 +115,13 @@ export function fuzzyScoreScript(
     allowAcronym: true,
   });
   // Commands are long — only contiguous includes, no subsequence/acronym.
+  // A word that only shows up in a flag (--seed-oauth) stays under the same word in a script name.
   const cmdScore = command
-    ? scoreMatch(q, command, { allowSubsequence: false, allowAcronym: false })
+    ? scoreMatch(q, command, {
+        allowSubsequence: false,
+        allowAcronym: false,
+        wordRank: 85,
+      })
     : 0;
   const descScore = description
     ? scoreMatch(q, description, { allowSubsequence: true, allowAcronym: true })

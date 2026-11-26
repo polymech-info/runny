@@ -47,3 +47,21 @@ export function endScriptDrag() {
   setActivePipeDrag(null);
   setActiveFavouriteDrag(null);
 }
+
+/** Reorder of a pipe segment. Kept beside the script drag so dragover can tell them apart. */
+export type PipeSegmentDrag = {
+  releaseId: string;
+  facetId: string;
+};
+
+export let activeSegmentDrag: PipeSegmentDrag | null = null;
+
+export function beginSegmentDrag(releaseId: string, facetId: string) {
+  activeSegmentDrag = { releaseId, facetId };
+  setActivePipeDrag(null);
+  setActiveFavouriteDrag(null);
+}
+
+export function endSegmentDrag() {
+  activeSegmentDrag = null;
+}

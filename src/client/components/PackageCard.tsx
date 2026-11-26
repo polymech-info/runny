@@ -46,7 +46,7 @@ export function PackageCard({ pkg }: PackageCardProps) {
 
   if (filteredScripts.length === 0) return null;
 
-  const nodes: ScriptTreeNode[] = groupingEnabled
+  const nodes: ScriptTreeNode[] = groupingEnabled && !searchQuery.trim()
     ? groupScripts(filteredScripts)
     : filteredScripts.map(([name, command]) => ({
         path: name,

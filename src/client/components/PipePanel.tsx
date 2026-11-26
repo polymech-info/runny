@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { ArrowRight, Boxes, ListStart, Play, Square, Volume2, VolumeX, X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { ArrowRight, Boxes, GripVertical, ListStart, Play, Plus, Square, Volume2, VolumeX, X } from "lucide-react";
 import {
   fetchPackages,
   fetchPipeReport,
@@ -13,8 +13,11 @@ import {
 import {
   activeFavouriteDrag,
   activePipeDrag,
+  activeSegmentDrag,
   beginScriptDrag,
+  beginSegmentDrag,
   endScriptDrag,
+  endSegmentDrag,
 } from "../lib/favourite-dnd";
 import {
   applyPipeRename,
@@ -26,6 +29,7 @@ import {
 } from "../lib/pipe-layout";
 import { resolveDisplayStatus } from "../lib/script-status";
 import { useStore } from "../store/scripts";
+import { ScriptInsertMenu } from "./ScriptInsertMenu";
 import { ScriptRow } from "./ScriptRow";
 
 type Facet = {
@@ -49,14 +53,20 @@ type Release = {
 
 const EXTRA_KEY = "runny-pipe-extra";
 
-const ZIP_PALETTE: PaletteItem[] = [
-  { label: "xblox-next", script: "pipe:zip:test:xblox-next" },
-  { label: "xblox-language", script: "pipe:zip:test:xblox-language" },
-  { label: "xblox-network", script: "pipe:zip:test:xblox-network" },
-  { label: "ipc-next", script: "pipe:zip:test:ipc-next" },
-  { label: "editor", script: "pipe:zip:test:editor" },
-  { label: "llama", script: "pipe:zip:test:llama" },
-];
+function testPalette(prefix: string): PaletteItem[] {
+  return [
+    { label: "xblox-next", script: `${prefix}:xblox-next` },
+    { label: "xblox-language", script: `${prefix}:xblox-language` },
+    { label: "xblox-network", script: `${prefix}:xblox-network` },
+    { label: "ipc-next", script: `${prefix}:ipc-next` },
+    { label: "editor", script: `${prefix}:editor` },
+    { label: "llama", script: `${prefix}:llama` },
+    { label: "seed", script: "test:store-tanit:seed" },
+  ];
+}
+
+const ZIP_PALETTE = testPalette("pipe:zip:test").filter((item) => item.label !== "seed");
+const STORE_PALETTE = testPalette("pipe:store:test");
 
 const RELEASES: Release[] = [
   {
@@ -128,6 +138,35 @@ const RELEASES: Release[] = [
     ],
     palette: ZIP_PALETTE,
   },
+  {
+    id: "tanit-store",
+    label: "tanit store",
+    preset: "store-tanit-msix-release",
+    facets: [
+      {
+        id: "build",
+        label: "Build",
+        scripts: ["update:chat", "update:settings", "update:xblox", "build:cpp:store-tanit"],
+      },
+      { id: "stage", label: "Stage", scripts: ["release:stage-tanit-store"] },
+      {
+        id: "test",
+        label: "Test",
+        scripts: ["pipe:store:test:core", "pipe:store:test:xblox"],
+      },
+      {
+        id: "pack",
+        label: "Pack",
+        scripts: ["package:store-tanit:msix", "audit:store-tanit:msix"],
+      },
+      {
+        id: "deploy",
+        label: "Deploy",
+        scripts: ["msstore:status", "msstore:preview"],
+      },
+    ],
+    palette: STORE_PALETTE,
+  },
 ];
 
 function loadExtras(): Record<string, string[]> {
@@ -181,6 +220,64 @@ function scriptId(packages: PackageInfo[], scriptName: string): string {
     packages.find((p) => p.scripts[scriptName]) ??
     packages.find((p) => p.name === "tanit");
   return `${pkg?.name ?? "tanit"}:${scriptName}`;
+}
+
+type ShownFacet = Facet & { custom: boolean };
+
+function shownFacets(release: Release, layout: PipeLayout): ShownFacet[] {
+  const builtins = release.facets.map((facet) => ({ ...facet, custom: false }));
+  const customs = (layout.custom[release.id] ?? []).map((facet) => ({
+    id: facet.id,
+    label: facet.label,
+    scripts: [] as string[],
+    custom: true,
+  }));
+  const known = new Map([...builtins, ...customs].map((facet) => [facet.id, facet]));
+  const stored = (layout.order[release.id] ?? builtins.map((facet) => facet.id)).filter((id) =>
+    known.has(id)
+  );
+  for (const facet of [...builtins, ...customs]) {
+    if (!stored.includes(facet.id)) stored.push(facet.id);
+  }
+  return stored.map((id) => known.get(id)!);
+}
+
+function SegmentAdd({
+  label,
+  open,
+  onOpen,
+}: {
+  label: string;
+  open: boolean;
+  onOpen: (anchor: HTMLButtonElement) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="mt-1 inline-flex items-center justify-center rounded-full"
+      style={{
+        width: 18,
+        height: 18,
+        border: open ? "1px solid #6366f1" : "1px solid rgba(99,102,241,0.45)",
+        background: open ? "rgba(99,102,241,0.22)" : "rgba(99,102,241,0.12)",
+        color: "#6366f1",
+      }}
+      title={`Add to ${label}`}
+      aria-label={`Add to ${label}`}
+      onClick={(event) => onOpen(event.currentTarget)}
+    >
+      <Plus size={11} />
+    </button>
+  );
+}
+
+function moveFacet(ids: string[], facetId: string, index: number): string[] {
+  const from = ids.indexOf(facetId);
+  if (from < 0) return ids;
+  const rest = ids.filter((id) => id !== facetId);
+  const at = Math.max(0, Math.min(from < index ? index - 1 : index, rest.length));
+  rest.splice(at, 0, facetId);
+  return rest;
 }
 
 function facetScriptNames(
@@ -261,28 +358,33 @@ export function PipePanel() {
   const [extrasByRelease] = useState<Record<string, string[]>>(loadExtras);
   const [layout, setLayout] = useState<PipeLayout>(loadPipeLayout);
   const [dropAt, setDropAt] = useState<{ facetId: string; index: number } | null>(null);
+  const [segmentDrop, setSegmentDrop] = useState<number | null>(null);
+  const [segmentName, setSegmentName] = useState("");
+  const [insert, setInsert] = useState<{ facetId: string; nonce: number } | null>(null);
+  const insertAnchorRef = useRef<HTMLElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const release = RELEASES.find((r) => r.id === releaseId) ?? RELEASES[0];
   const extras = extrasByRelease[release.id] ?? [];
   const namesOf = (facetId: string) => facetScriptNames(release, facetId, extras, layout);
+  const shown = shownFacets(release, layout);
   const segmentFlag = (facetId: string): PipeSegmentFlag =>
     layout.segments[release.id]?.[facetId] ?? {};
   const facetsFrom = (facetId: string, skipMuted: boolean) => {
-    const start = release.facets.findIndex((facet) => facet.id === facetId);
+    const start = shown.findIndex((facet) => facet.id === facetId);
     if (start < 0) return [];
-    return release.facets
+    return shown
       .slice(start)
       .filter((facet) => !(skipMuted && segmentFlag(facet.id).muted));
   };
-  const pipeFacets = facetsFrom(release.facets[0]?.id ?? "", true);
+  const pipeFacets = facetsFrom(shown[0]?.id ?? "", true);
   const allNames = pipeFacets.flatMap((facet) => namesOf(facet.id));
 
   const writeFacet = (facetId: string, names: string[], sourceFacetId?: string, sourceNames?: string[]) => {
     const next = loadPipeLayout();
     const releaseFacets = { ...(next.facets[release.id] ?? {}) };
-    for (const facet of release.facets) {
+    for (const facet of shownFacets(release, next)) {
       if (!releaseFacets[facet.id]) {
         releaseFacets[facet.id] = facetScriptNames(release, facet.id, extras, next);
       }
@@ -293,6 +395,58 @@ export function PipePanel() {
     }
     next.facets[release.id] = releaseFacets;
     next.omitted = next.omitted.filter((name) => !names.includes(name));
+    savePipeLayout(next);
+  };
+
+  const openPicker = (facetId: string, anchor: HTMLButtonElement) => {
+    insertAnchorRef.current = anchor;
+    setInsert({ facetId, nonce: Date.now() });
+  };
+
+  const pickScript = (scriptId: string) => {
+    const facetId = insert?.facetId;
+    setInsert(null);
+    if (!facetId) return;
+    const name = scriptNameFromDrag(packages, scriptId);
+    if (!name) return;
+    const names = namesOf(facetId);
+    if (names.includes(name)) return;
+    writeFacet(facetId, [...names, name]);
+  };
+
+  const reorderSegment = (facetId: string, index: number) => {
+    const next = loadPipeLayout();
+    next.order[release.id] = moveFacet(
+      shownFacets(release, next).map((facet) => facet.id),
+      facetId,
+      index
+    );
+    savePipeLayout(next);
+  };
+
+  const addSegment = () => {
+    const label = segmentName.trim();
+    if (!label) return;
+    const next = loadPipeLayout();
+    const id = `c_${Date.now().toString(36)}`;
+    const ids = shownFacets(release, next).map((facet) => facet.id);
+    next.custom[release.id] = [...(next.custom[release.id] ?? []), { id, label }];
+    next.order[release.id] = [...ids, id];
+    const lists = { ...(next.facets[release.id] ?? {}) };
+    lists[id] = [];
+    next.facets[release.id] = lists;
+    savePipeLayout(next);
+    setSegmentName("");
+  };
+
+  const removeSegment = (facetId: string) => {
+    const next = loadPipeLayout();
+    next.custom[release.id] = (next.custom[release.id] ?? []).filter((facet) => facet.id !== facetId);
+    if (next.order[release.id]) {
+      next.order[release.id] = next.order[release.id].filter((id) => id !== facetId);
+    }
+    if (next.facets[release.id]) delete next.facets[release.id][facetId];
+    if (next.segments[release.id]) delete next.segments[release.id][facetId];
     savePipeLayout(next);
   };
 
@@ -512,7 +666,7 @@ export function PipePanel() {
             })}
           </div>
         )}
-        {release.facets.map((facet) => {
+        {shown.map((facet, facetIndex) => {
           const session = facetSession(facet.id);
           const names = namesOf(facet.id);
           const empty = names.length === 0;
@@ -546,6 +700,7 @@ export function PipePanel() {
           const tail = facetsFrom(facet.id, true);
           const fromHere = tail.flatMap((item) => namesOf(item.id));
           const dropHere = (event: React.DragEvent, index: number) => {
+            if (activeSegmentDrag) return;
             if (!pipeDragActive()) return;
             event.preventDefault();
             event.stopPropagation();
@@ -555,6 +710,14 @@ export function PipePanel() {
           const commitDrop = (event: React.DragEvent) => {
             event.preventDefault();
             event.stopPropagation();
+            if (activeSegmentDrag?.releaseId === release.id) {
+              const index = segmentDrop ?? facetIndex;
+              const dragged = activeSegmentDrag.facetId;
+              setSegmentDrop(null);
+              endSegmentDrag();
+              reorderSegment(dragged, index);
+              return;
+            }
             const index = dropAt?.facetId === facet.id ? dropAt.index : names.length;
             setDropAt(null);
             const incoming = dragScriptNames(packages);
@@ -577,8 +740,11 @@ export function PipePanel() {
             endScriptDrag();
           };
           return (
+            <React.Fragment key={facet.id}>
+            {segmentDrop === facetIndex && (
+              <div className="h-0.5 rounded" style={{ background: "#6366f1" }} />
+            )}
             <section
-              key={facet.id}
               className="rounded-md px-2 py-2"
               style={{
                 border:
@@ -588,6 +754,16 @@ export function PipePanel() {
                 opacity: muted ? 0.55 : undefined,
               }}
               onDragOver={(event) => {
+                if (activeSegmentDrag?.releaseId === release.id) {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const next =
+                    event.clientY < rect.top + rect.height / 2 ? facetIndex : facetIndex + 1;
+                  setSegmentDrop(next);
+                  setDropAt(null);
+                  return;
+                }
                 if (!pipeDragActive()) return;
                 event.preventDefault();
                 event.dataTransfer.dropEffect = activePipeDrag?.fromFacet ? "move" : "copy";
@@ -600,6 +776,25 @@ export function PipePanel() {
               onDrop={commitDrop}
             >
               <div className="flex items-center gap-2">
+                <span
+                  draggable
+                  className="cursor-grab active:cursor-grabbing shrink-0"
+                  style={{ color: "var(--color-muted)" }}
+                  title="Drag to reorder"
+                  aria-label={`Reorder ${facet.label}`}
+                  onDragStart={(event) => {
+                    event.stopPropagation();
+                    beginSegmentDrag(release.id, facet.id);
+                    event.dataTransfer.setData("text/plain", facet.id);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragEnd={() => {
+                    setSegmentDrop(null);
+                    endSegmentDrag();
+                  }}
+                >
+                  <GripVertical size={12} />
+                </span>
                 <span
                   className="text-xs font-semibold truncate"
                   style={{ color: "var(--color-text)" }}
@@ -698,6 +893,18 @@ export function PipePanel() {
                 >
                   {running ? <Square size={12} /> : <Play size={12} />}
                 </button>
+                {facet.custom && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded"
+                    style={{ width: 16, height: 16, color: "#dc2626" }}
+                    title="Remove segment"
+                    aria-label={`Remove ${facet.label}`}
+                    onClick={() => removeSegment(facet.id)}
+                  >
+                    <X size={12} />
+                  </button>
+                )}
                 </div>
               </div>
               {empty ? (
@@ -805,15 +1012,76 @@ export function PipePanel() {
                   )}
                 </ul>
               )}
+              <SegmentAdd
+                label={facet.label}
+                open={insert?.facetId === facet.id}
+                onOpen={(anchor) => openPicker(facet.id, anchor)}
+              />
             </section>
+            </React.Fragment>
           );
         })}
+        {segmentDrop === shown.length && (
+          <div className="h-0.5 rounded" style={{ background: "#6366f1" }} />
+        )}
+        <form
+          className="flex items-center gap-1"
+          onSubmit={(event) => {
+            event.preventDefault();
+            addSegment();
+          }}
+          onDragOver={(event) => {
+            if (activeSegmentDrag?.releaseId !== release.id) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            setSegmentDrop(shown.length);
+          }}
+          onDrop={(event) => {
+            if (activeSegmentDrag?.releaseId !== release.id) return;
+            event.preventDefault();
+            const dragged = activeSegmentDrag.facetId;
+            setSegmentDrop(null);
+            endSegmentDrag();
+            reorderSegment(dragged, shown.length);
+          }}
+        >
+          <input
+            value={segmentName}
+            onChange={(event) => setSegmentName(event.target.value)}
+            placeholder="New segment"
+            aria-label="New segment"
+            className="flex-1 min-w-0 text-xs rounded px-1.5 py-1 outline-none"
+            style={{
+              background: "var(--color-bg)",
+              color: "var(--color-text)",
+              border: "1px solid var(--color-border)",
+            }}
+          />
+          <button
+            type="submit"
+            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-1 rounded disabled:opacity-30"
+            style={{ color: "var(--color-text)", background: "var(--color-border)" }}
+            disabled={!segmentName.trim()}
+            title="Add a segment"
+          >
+            <Plus size={12} />
+            Add
+          </button>
+        </form>
         {error && (
           <p className="text-[11px]" style={{ color: "#ef4444" }}>
             {error}
           </p>
         )}
       </div>
+      {insert && (
+        <ScriptInsertMenu
+          key={insert.nonce}
+          anchorRef={insertAnchorRef}
+          onPick={pickScript}
+          onClose={() => setInsert(null)}
+        />
+      )}
     </div>
   );
 }

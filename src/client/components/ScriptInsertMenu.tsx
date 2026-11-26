@@ -59,16 +59,24 @@ export function ScriptInsertMenu({
   const filtered = useMemo(() => {
     const q = query.trim();
     if (!q) return entries;
-    return entries.filter(
-      (entry) =>
-        fuzzyScoreScript(
+    return entries
+      .map((entry) => ({
+        entry,
+        score: fuzzyScoreScript(
           q,
           entry.scriptName,
           entry.command,
           descriptions[entry.id],
           entry.id
-        ) > 0
-    );
+        ),
+      }))
+      .filter((item) => item.score > 0)
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          a.entry.scriptName.localeCompare(b.entry.scriptName)
+      )
+      .map((item) => item.entry);
   }, [descriptions, entries, query]);
 
   useEffect(() => {
@@ -96,27 +104,10 @@ export function ScriptInsertMenu({
         retryFrame = window.requestAnimationFrame(reposition);
         return;
       }
-      const rect = anchor.getBoundingClientRect();
-      if (
-        rect.bottom < 0 ||
-        rect.top > window.innerHeight ||
-        rect.right < 0 ||
-        rect.left > window.innerWidth
-      ) {
-        onClose();
-        return;
-      }
       const width = popover.offsetWidth || 280;
       const height = popover.offsetHeight || 360;
-      let left = rect.left + rect.width / 2 - width / 2;
-      left = Math.max(VIEW_PAD, Math.min(left, window.innerWidth - width - VIEW_PAD));
-      const spaceBelow = window.innerHeight - rect.bottom - VIEW_PAD;
-      const spaceAbove = rect.top - VIEW_PAD;
-      let top = rect.bottom + VIEW_PAD;
-      if (height > spaceBelow && spaceAbove > spaceBelow) {
-        top = rect.top - height - VIEW_PAD;
-      }
-      top = Math.max(VIEW_PAD, Math.min(top, window.innerHeight - height - VIEW_PAD));
+      const left = Math.max(VIEW_PAD, (window.innerWidth - width) / 2);
+      const top = Math.max(VIEW_PAD, (window.innerHeight - height) / 2);
       setPos({ left, top });
     };
     reposition();
@@ -127,7 +118,7 @@ export function ScriptInsertMenu({
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", reposition, true);
     };
-  }, [anchorRef, filtered.length, onClose]);
+  }, [anchorRef, filtered.length]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
